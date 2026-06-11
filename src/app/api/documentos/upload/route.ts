@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { uploadToGoogleDrive } from "@/lib/google-drive";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -48,9 +49,12 @@ export async function POST(req: NextRequest) {
       urlSupabase = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/documentos/${filePath}`;
     }
 
-    // 2. Generate a mock Google Drive link representing the dual primary storage
-    const mockDriveId = `mock_drive_${Math.random().toString(36).substring(2, 15)}`;
-    const urlGoogleDrive = `https://drive.google.com/open?id=${mockDriveId}&file=${encodeURIComponent(file.name)}`;
+    // 2. Upload to Google Drive as dual primary storage
+    const urlGoogleDrive = await uploadToGoogleDrive(
+      file.name,
+      file.type,
+      fileBuffer
+    );
 
     // 3. Save Document metadata in DB
     const { data: { user } } = await supabase.auth.getUser();
