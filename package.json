@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "npx @opennextjs/cloudflare build",
-    "build:local": "next build --webpack",
+    "build": "next build --webpack",
+    "build:cf": "npx @opennextjs/cloudflare build",
     "start": "next start",
     "preview": "npx wrangler dev",
-    "deploy": "npx wrangler deploy",
+    "deploy": "npm run build:cf && npx wrangler deploy",
     "lint": "next lint"
   },
   "dependencies": {
