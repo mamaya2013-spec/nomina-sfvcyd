@@ -1,5 +1,5 @@
-/** @type {import("@opennextjs/cloudflare").OpenNextConfig} */
 const config = {
+  default: {},
   buildCommand: "npx next build --webpack",
 };
 
