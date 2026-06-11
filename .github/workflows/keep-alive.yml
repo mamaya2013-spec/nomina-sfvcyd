@@ -1,0 +1,21 @@
+name: Database Keep-Alive
+
+on:
+  schedule:
+    # Runs at 00:00 and 12:00 every day
+    - cron: '0 */12 * * *'
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Keep-Alive API Endpoint
+        run: |
+          URL="${{ secrets.APP_URL }}"
+          if [ -z "$URL" ]; then
+            echo "APP_URL secret is not set. Skipping ping."
+            exit 0
+          fi
+          echo "Pinging $URL/api/keep-alive..."
+          curl -f -s "$URL/api/keep-alive" || echo "Warning: Keep-alive ping failed."
