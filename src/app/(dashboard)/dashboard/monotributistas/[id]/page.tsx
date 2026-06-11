@@ -1,6 +1,8 @@
 import React from "react";
 import MonotributistaDetailClient from "./MonotributistaDetailClient";
 
+export const runtime = 'edge';
+
 interface PageProps {
   params: Promise<{ id: string }>;
 }

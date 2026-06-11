@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "build": "npx @opennextjs/cloudflare build",
+    "build:local": "next build --webpack",
     "start": "next start",
+    "preview": "npx wrangler dev",
+    "deploy": "npx wrangler deploy",
     "lint": "next lint"
   },
   "dependencies": {
@@ -28,7 +31,6 @@
     "recharts": "^3.8.1",
     "serwist": "^9.5.11",
     "sonner": "^2.0.7",
-    "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
@@ -36,7 +38,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/web-push": "^3.6.4",
+
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "typescript": "^5"

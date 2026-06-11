@@ -31,5 +31,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "public/sw.js", "public/sw.js.map"]
+  "exclude": ["node_modules", "public/sw.js", "public/sw.js.map", "open-next.config.ts"]
 }

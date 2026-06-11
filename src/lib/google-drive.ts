@@ -1,5 +1,3 @@
-import crypto from "crypto";
-
 interface GoogleDriveConfig {
   clientEmail: string;
   privateKey: string;
@@ -28,6 +26,52 @@ function getGoogleConfig(): GoogleDriveConfig | null {
   };
 }
 
+/**
+ * Base64url encode a string or ArrayBuffer (Edge Runtime compatible)
+ */
+function base64urlEncode(input: string | ArrayBuffer): string {
+  let bytes: Uint8Array;
+  if (typeof input === "string") {
+    bytes = new TextEncoder().encode(input);
+  } else {
+    bytes = new Uint8Array(input);
+  }
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Convert a PEM private key to a CryptoKey for signing (Web Crypto API)
+ */
+async function importPrivateKey(pem: string): Promise<CryptoKey> {
+  // Strip PEM header/footer and whitespace
+  const pemBody = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s/g, "");
+
+  // Decode base64 to ArrayBuffer
+  const binaryString = atob(pemBody);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  return crypto.subtle.importKey(
+    "pkcs8",
+    bytes.buffer,
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      hash: "SHA-256",
+    },
+    false,
+    ["sign"]
+  );
+}
+
 async function getAccessToken(config: GoogleDriveConfig): Promise<string> {
   const iat = Math.floor(Date.now() / 1000);
   const exp = iat + 3600;
@@ -45,13 +89,20 @@ async function getAccessToken(config: GoogleDriveConfig): Promise<string> {
     typ: "JWT",
   };
 
-  const encodedHeader = Buffer.from(JSON.stringify(header)).toString("base64url");
-  const encodedClaim = Buffer.from(JSON.stringify(claim)).toString("base64url");
+  const encodedHeader = base64urlEncode(JSON.stringify(header));
+  const encodedClaim = base64urlEncode(JSON.stringify(claim));
 
-  const sign = crypto.createSign("RSA-SHA256");
-  sign.update(`${encodedHeader}.${encodedClaim}`);
-  const signature = sign.sign(config.privateKey, "base64url");
+  const signingInput = `${encodedHeader}.${encodedClaim}`;
 
+  // Sign with Web Crypto API (Edge Runtime compatible)
+  const privateKey = await importPrivateKey(config.privateKey);
+  const signatureBuffer = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    privateKey,
+    new TextEncoder().encode(signingInput)
+  );
+
+  const signature = base64urlEncode(signatureBuffer);
   const jwt = `${encodedHeader}.${encodedClaim}.${signature}`;
 
   const response = await fetch("https://oauth2.googleapis.com/token", {
@@ -75,13 +126,26 @@ async function getAccessToken(config: GoogleDriveConfig): Promise<string> {
 }
 
 /**
+ * Convert an ArrayBuffer to a base64 string (Edge Runtime compatible)
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
  * Uploads a file buffer to the configured Google Drive folder.
  * Returns the Google Drive web view URL for the uploaded file.
+ * Compatible with Edge Runtime (uses Web Crypto API instead of Node.js crypto).
  */
 export async function uploadToGoogleDrive(
   fileName: string,
   mimeType: string,
-  fileBuffer: Buffer
+  fileBuffer: ArrayBuffer | Buffer
 ): Promise<string> {
   const config = getGoogleConfig();
   if (!config) {
@@ -103,6 +167,11 @@ export async function uploadToGoogleDrive(
     const delimiter = `\r\n--${boundary}\r\n`;
     const closeDelimiter = `\r\n--${boundary}--`;
 
+    // Convert buffer to base64 using Edge-compatible method
+    const bufferAsArrayBuffer: ArrayBuffer = fileBuffer instanceof ArrayBuffer
+      ? fileBuffer
+      : (fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength) as ArrayBuffer);
+
     const bodyParts = [
       delimiter,
       'Content-Type: application/json; charset=UTF-8\r\n\r\n',
@@ -110,7 +179,7 @@ export async function uploadToGoogleDrive(
       delimiter,
       `Content-Type: ${mimeType}\r\n`,
       'Content-Transfer-Encoding: base64\r\n\r\n',
-      fileBuffer.toString("base64"),
+      arrayBufferToBase64(bufferAsArrayBuffer),
       closeDelimiter,
     ];
 
@@ -123,7 +192,6 @@ export async function uploadToGoogleDrive(
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": `multipart/related; boundary=${boundary}`,
-          "Content-Length": body.length.toString(),
         },
         body: body,
       }

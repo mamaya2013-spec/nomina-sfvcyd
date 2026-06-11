@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToGoogleDrive } from "@/lib/google-drive";
 
+export const runtime = 'edge';
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
 
@@ -22,7 +24,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tipo de persona inválido." }, { status: 400 });
     }
 
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const fileArrayBuffer = await file.arrayBuffer();
+    const fileBuffer = new Uint8Array(fileArrayBuffer);
     const fileExtension = file.name.split(".").pop();
     const cleanFileName = `${tipoDocumento}_${Date.now()}.${fileExtension}`;
     const filePath = `${tipoPersona}/${personaId}/${cleanFileName}`;
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
     const urlGoogleDrive = await uploadToGoogleDrive(
       file.name,
       file.type,
-      fileBuffer
+      fileArrayBuffer
     );
 
     // 3. Save Document metadata in DB
