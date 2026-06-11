@@ -1,7 +1,6 @@
 import React from "react";
 import BecarioDetailClient from "./BecarioDetailClient";
 
-export const runtime = 'edge';
 
 interface PageProps {
   params: Promise<{ id: string }>;
