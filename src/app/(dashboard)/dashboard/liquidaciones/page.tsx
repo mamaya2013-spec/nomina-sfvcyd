@@ -41,6 +41,9 @@ export default function LiquidacionesPage() {
   const [exists, setExists] = useState(false);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Selection State for Preview Devengamiento
+  const [selectedPeopleIds, setSelectedPeopleIds] = useState<string[]>([]);
 
   // Available Years
   const years = useMemo(() => {
@@ -70,12 +73,20 @@ export default function LiquidacionesPage() {
     try {
       const res = await fetch(`/api/liquidaciones?mes=${mes}&anio=${anio}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al cargar liquidaciones");
+      if (!res.ok) throw new Error(data.error || "Error al cargar devengamientos");
 
-      setLiquidations(data.liquidations || []);
+      const list = data.liquidations || [];
+      setLiquidations(list);
       setExists(data.exists);
       setStatus(data.status);
       setSemester(data.semester);
+
+      // Auto-select everyone if it's preview mode (not saved yet)
+      if (!data.exists && list.length > 0) {
+        setSelectedPeopleIds(list.map((l: any) => l.persona_id));
+      } else {
+        setSelectedPeopleIds([]);
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -89,17 +100,25 @@ export default function LiquidacionesPage() {
 
   // Generate / Save Liquidations
   const handleGenerate = async () => {
+    if (selectedPeopleIds.length === 0) {
+      toast.warning("Debe seleccionar al menos una persona para devengar.");
+      return;
+    }
     setActionLoading(true);
     try {
       const res = await fetch("/api/liquidaciones", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mes, anio }),
+        body: JSON.stringify({
+          mes,
+          anio,
+          persona_ids: selectedPeopleIds
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al generar liquidación");
+      if (!res.ok) throw new Error(data.error || "Error al generar devengamiento");
 
-      toast.success(`Liquidación generada con éxito. Registros creados: ${data.count}`);
+      toast.success(`Devengamiento generado con éxito. Registros creados: ${data.count}`);
       await loadLiquidations();
     } catch (err: any) {
       toast.error(err.message);
@@ -131,7 +150,7 @@ export default function LiquidacionesPage() {
 
   // Delete Liquidations
   const handleDelete = async () => {
-    if (!window.confirm("¿Está seguro de que desea eliminar la liquidación de este mes? Se borrarán permanentemente los cálculos guardados.")) {
+    if (!window.confirm("¿Está seguro de que desea eliminar el devengamiento de este mes? Se borrarán permanentemente los cálculos guardados.")) {
       return;
     }
     setActionLoading(true);
@@ -140,9 +159,9 @@ export default function LiquidacionesPage() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al eliminar liquidación");
+      if (!res.ok) throw new Error(data.error || "Error al eliminar devengamiento");
 
-      toast.success("Liquidación eliminada de la base de datos.");
+      toast.success("Devengamiento eliminado de la base de datos.");
       await loadLiquidations();
     } catch (err: any) {
       toast.error(err.message);
@@ -164,6 +183,10 @@ export default function LiquidacionesPage() {
     let monosTotal = 0;
 
     for (const l of liquidations) {
+      // In preview mode, only sum up selected individuals
+      if (status === "preview" && !semester?.bloqueado && !selectedPeopleIds.includes(l.persona_id)) {
+        continue;
+      }
       if (l.tipo_persona === "becario") {
         becariosCount++;
         becariosBase += l.monto_base;
@@ -191,7 +214,7 @@ export default function LiquidacionesPage() {
       totalActiva: becariosActiva + monosActiva,
       totalGrand: becariosTotal + monosTotal,
     };
-  }, [liquidations]);
+  }, [liquidations, selectedPeopleIds, status, semester]);
 
   // Filter list by searchQuery
   const filteredLiquidations = useMemo(() => {
@@ -260,7 +283,7 @@ export default function LiquidacionesPage() {
     const wsActivaMonos = XLSX.utils.json_to_sheet(activaMonosData);
     XLSX.utils.book_append_sheet(wb, wsActivaMonos, "Activa Monotributistas");
 
-    XLSX.writeFile(wb, `Liquidacion_Tesoria_${mes.toString().padStart(2, "0")}_${anio}.xlsx`);
+    XLSX.writeFile(wb, `Devengamiento_Tesoria_${mes.toString().padStart(2, "0")}_${anio}.xlsx`);
     toast.success("Excel multichapa descargado correctamente.");
   };
 
@@ -279,7 +302,7 @@ export default function LiquidacionesPage() {
     doc.text("SECRETARÍA DE FORTALECIMIENTO VECINAL, CULTURA Y DEPORTES", 10, 20);
     doc.setFontSize(12);
     doc.setFont("helvetica", "normal");
-    doc.text(`Reporte Oficial de Liquidación de Haberes - Período: ${monthLabel} ${anio}`, 10, 27);
+    doc.text(`Reporte Oficial de Devengamiento de Haberes - Período: ${monthLabel} ${anio}`, 10, 27);
     doc.line(10, 32, 200, 32);
 
     // Consolidated Summary Table
@@ -287,7 +310,7 @@ export default function LiquidacionesPage() {
     doc.text("Resumen Consolidado de Conceptos", 10, 42);
 
     const summaryRows = [
-      ["Concepto", "Personas", "Importe Base", "Tarjeta Activa (10%)", "Total Liquidado"],
+      ["Concepto", "Personas", "Importe Base", "Tarjeta Activa (10%)", "Total Devengado"],
       ["Becas de Capacitación", summary.becariosCount, `$${summary.becariosBase.toLocaleString("es-AR")}`, `$${summary.becariosActiva.toLocaleString("es-AR")}`, `$${summary.becariosTotal.toLocaleString("es-AR")}`],
       ["Honorarios Monotributo", summary.monosCount, `$${summary.monosBase.toLocaleString("es-AR")}`, `$${summary.monosActiva.toLocaleString("es-AR")}`, `$${summary.monosTotal.toLocaleString("es-AR")}`],
       ["Totales Generales", summary.totalCount, `$${summary.totalBase.toLocaleString("es-AR")}`, `$${summary.totalActiva.toLocaleString("es-AR")}`, `$${summary.totalGrand.toLocaleString("es-AR")}`]
@@ -311,7 +334,7 @@ export default function LiquidacionesPage() {
     const currentY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("Certifico que la liquidación adjunta se condice con el personal registrado y en funciones.", 10, currentY);
+    doc.text("Certifico que el devengamiento adjunto se condice con el personal registrado y en funciones.", 10, currentY);
 
     // Signature Block at the bottom
     const sigY = 245;
@@ -353,7 +376,7 @@ export default function LiquidacionesPage() {
       }
     });
 
-    doc.save(`Liquidacion_Oficial_${monthLabel}_${anio}.pdf`);
+    doc.save(`Devengamiento_Oficial_${monthLabel}_${anio}.pdf`);
     toast.success("PDF oficial descargado correctamente.");
   };
 
@@ -364,9 +387,9 @@ export default function LiquidacionesPage() {
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerTitleGroup}>
-          <h1>Liquidación Mensual</h1>
+          <h1>Devengamiento Mensual</h1>
           <p className="text-secondary">
-            Consolide, procese y exporte el pago de haberes del personal de la Secretaría.
+            Consolide, procese y exporte el devengamiento de haberes del personal de la Secretaría.
           </p>
         </div>
 
@@ -447,7 +470,7 @@ export default function LiquidacionesPage() {
               </div>
               <div className={styles.kpiInfo}>
                 <span className={styles.kpiVal}>{summary.totalCount}</span>
-                <span className={styles.kpiLabel}>Total Liquidados</span>
+                <span className={styles.kpiLabel}>Total Devengados</span>
               </div>
             </div>
 
@@ -515,10 +538,10 @@ export default function LiquidacionesPage() {
                     <button
                       onClick={handleGenerate}
                       className={styles.primaryBtn}
-                      disabled={liquidations.length === 0}
+                      disabled={selectedPeopleIds.length === 0}
                     >
                       <CheckCircle size={16} />
-                      <span>Generar Liquidación</span>
+                      <span>Generar Devengamiento ({selectedPeopleIds.length})</span>
                     </button>
                   )}
 
@@ -530,7 +553,7 @@ export default function LiquidacionesPage() {
                         className={styles.successBtn}
                       >
                         <CheckCircle size={16} />
-                        <span>Procesar Liquidación</span>
+                        <span>Procesar Devengamiento</span>
                       </button>
                       <button
                         onClick={handleDelete}
@@ -565,7 +588,7 @@ export default function LiquidacionesPage() {
                   {status === "pagada" && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#10b981", fontWeight: "600", fontSize: "14px" }}>
                       <Lock size={16} />
-                      <span>Liquidación Pagada y Cerrada</span>
+                      <span>Devengamiento Pagado y Cerrado</span>
                     </div>
                   )}
 
@@ -592,8 +615,8 @@ export default function LiquidacionesPage() {
             <div className={styles.warningBox}>
               <AlertTriangle size={20} style={{ flexShrink: 0 }} />
               <div>
-                <strong>Vista Previa de Liquidación:</strong> Los datos visualizados abajo corresponden a una
-                proyección automática de haberes para el personal activo. Debe presionar <strong>"Generar Liquidación"</strong>
+                <strong>Vista Previa de Devengamiento:</strong> Los datos visualizados abajo corresponden a una
+                proyección automática de haberes para el personal activo. Debe presionar <strong>"Generar Devengamiento"</strong>
                 para guardar formalmente estos registros y habilitar los reportes de exportación oficiales.
               </div>
             </div>
@@ -602,7 +625,7 @@ export default function LiquidacionesPage() {
           {/* Table list */}
           <div className={styles.tableWrapper}>
             <div className={styles.tableHeader}>
-              <h3>Desglose de Haberes Liquidados</h3>
+              <h3>Desglose de Haberes Devengados</h3>
               <span className="text-secondary" style={{ fontSize: "13px" }}>
                 Mostrando {filteredLiquidations.length} de {liquidations.length} registros
               </span>
@@ -612,6 +635,28 @@ export default function LiquidacionesPage() {
               <table className={styles.table}>
                 <thead>
                   <tr>
+                    {status === "preview" && !semester?.bloqueado && (
+                      <th style={{ width: "40px", textAlign: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={
+                            filteredLiquidations.length > 0 &&
+                            filteredLiquidations.every((l) => selectedPeopleIds.includes(l.persona_id))
+                          }
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const newSelected = Array.from(
+                                new Set([...selectedPeopleIds, ...filteredLiquidations.map((l) => l.persona_id)])
+                              );
+                              setSelectedPeopleIds(newSelected);
+                            } else {
+                              const filteredIds = filteredLiquidations.map((l) => l.persona_id);
+                              setSelectedPeopleIds(selectedPeopleIds.filter((id) => !filteredIds.includes(id)));
+                            }
+                          }}
+                        />
+                      </th>
+                    )}
                     <th>Apellido y Nombre</th>
                     <th>Concepto</th>
                     <th>CUIL / CUIT</th>
@@ -624,13 +669,31 @@ export default function LiquidacionesPage() {
                 <tbody>
                   {filteredLiquidations.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: "center", padding: "40px" }}>
-                        <span className="text-secondary">No se encontraron registros de liquidación.</span>
+                      <td
+                        colSpan={status === "preview" && !semester?.bloqueado ? 8 : 7}
+                        style={{ textAlign: "center", padding: "40px" }}
+                      >
+                        <span className="text-secondary">No se encontraron registros de devengamiento.</span>
                       </td>
                     </tr>
                   ) : (
                     filteredLiquidations.map((l) => (
                       <tr key={l.persona_id}>
+                        {status === "preview" && !semester?.bloqueado && (
+                          <td style={{ textAlign: "center" }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedPeopleIds.includes(l.persona_id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedPeopleIds([...selectedPeopleIds, l.persona_id]);
+                                } else {
+                                  setSelectedPeopleIds(selectedPeopleIds.filter((id) => id !== l.persona_id));
+                                }
+                              }}
+                            />
+                          </td>
+                        )}
                         <td className="font-semibold">{l.apellido_nombre}</td>
                         <td>
                           <span

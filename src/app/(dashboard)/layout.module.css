@@ -23,15 +23,47 @@
   height: 70px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0 20px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--glass-border);
 }
 
-.logo {
-  height: 40px;
-  width: auto;
+.logoContainer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.logoImage {
+  height: 36px;
+  width: 36px;
   object-fit: contain;
+  flex-shrink: 0;
+}
+
+.logoTextGroup {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  overflow: hidden;
+}
+
+.logoTitle {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+.logoSubtitle {
+  font-size: 9px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 175px;
 }
 
 .sidebarMenu {
@@ -225,6 +257,15 @@
 @media (max-width: 1024px) {
   .sidebar {
     width: 80px;
+  }
+
+  .logoTextGroup {
+    display: none;
+  }
+
+  .logoContainer {
+    justify-content: center;
+    gap: 0;
   }
 
   .sidebarHeader span,

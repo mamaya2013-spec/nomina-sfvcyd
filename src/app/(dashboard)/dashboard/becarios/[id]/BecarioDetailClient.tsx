@@ -63,6 +63,8 @@ export default function BecarioDetailClient({ id }: DetailProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fechaEmision, setFechaEmision] = useState("");
   const [fechaVencimiento, setFechaVencimiento] = useState("");
+  const [esTurno, setEsTurno] = useState(false);
+  const [fechaTurno, setFechaTurno] = useState("");
   const [uploading, setUploading] = useState(false);
 
   // Tags Drawer States
@@ -89,6 +91,8 @@ export default function BecarioDetailClient({ id }: DetailProps) {
     setSelectedFile(null);
     setFechaEmision("");
     setFechaVencimiento("");
+    setEsTurno(false);
+    setFechaTurno("");
     setIsUploadOpen(true);
   };
 
@@ -99,6 +103,11 @@ export default function BecarioDetailClient({ id }: DetailProps) {
       return;
     }
 
+    if (esTurno && !fechaTurno) {
+      toast.error("La fecha del turno es obligatoria.");
+      return;
+    }
+
     setUploading(true);
     try {
       const formData = new FormData();
@@ -106,8 +115,14 @@ export default function BecarioDetailClient({ id }: DetailProps) {
       formData.append("persona_id", id);
       formData.append("tipo_persona", "becario");
       formData.append("tipo_documento", uploadingType);
-      formData.append("fecha_emision", fechaEmision);
-      formData.append("fecha_vencimiento", fechaVencimiento);
+      
+      if (esTurno) {
+        formData.append("es_turno", "true");
+        formData.append("fecha_turno", fechaTurno);
+      } else {
+        formData.append("fecha_emision", fechaEmision);
+        formData.append("fecha_vencimiento", fechaVencimiento);
+      }
 
       const res = await fetch("/api/documentos/upload", {
         method: "POST",
@@ -238,6 +253,8 @@ export default function BecarioDetailClient({ id }: DetailProps) {
         fileName: doc ? doc.nombre_archivo : null,
         url: doc ? (doc.url_supabase || doc.url_google_drive) : null,
         updatedAt: doc ? doc.created_at : null,
+        esTurno: doc ? doc.es_turno : false,
+        fechaTurno: doc ? doc.fecha_turno : null,
       };
     });
   }, [documents]);
@@ -657,6 +674,11 @@ export default function BecarioDetailClient({ id }: DetailProps) {
                           <span className={styles.checkFileDate}>
                             Subido el {new Date(doc.updatedAt).toLocaleDateString("es-AR")}
                           </span>
+                          {doc.esTurno && doc.fechaTurno && (
+                            <span className="text-amber" style={{ fontSize: "11.5px", fontWeight: "600", display: "block", marginTop: "4px" }}>
+                              📅 Comprobante de Turno - Cita: {new Date(doc.fechaTurno + "T00:00:00").toLocaleDateString("es-AR")}
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <span className={styles.checkFileMissing}>Documento no presentado</span>
@@ -727,17 +749,47 @@ export default function BecarioDetailClient({ id }: DetailProps) {
             />
           </div>
 
-          <div className={styles.formGroup} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>
-              Fecha de Emisión
-            </label>
-            <input
-              type="date"
-              value={fechaEmision}
-              onChange={(e) => setFechaEmision(e.target.value)}
-              className="input-field"
-            />
-          </div>
+          {uploadingType === "antecedentes_penales" && (
+            <div className={styles.formGroup} style={{ display: "flex", alignItems: "center", gap: "8px", margin: "4px 0" }}>
+              <input
+                type="checkbox"
+                id="esTurno"
+                checked={esTurno}
+                onChange={(e) => setEsTurno(e.target.checked)}
+                style={{ width: "16px", height: "16px", cursor: "pointer" }}
+              />
+              <label htmlFor="esTurno" style={{ fontSize: "13.5px", fontWeight: "600", color: "var(--text-primary)", cursor: "pointer" }}>
+                Presentar Comprobante de Turno
+              </label>
+            </div>
+          )}
+
+          {esTurno ? (
+            <div className={styles.formGroup} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>
+                Fecha del Turno *
+              </label>
+              <input
+                type="date"
+                value={fechaTurno}
+                onChange={(e) => setFechaTurno(e.target.value)}
+                className="input-field"
+                required
+              />
+            </div>
+          ) : (
+            <div className={styles.formGroup} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <label style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>
+                Fecha de Emisión
+              </label>
+              <input
+                type="date"
+                value={fechaEmision}
+                onChange={(e) => setFechaEmision(e.target.value)}
+                className="input-field"
+              />
+            </div>
+          )}
 
           <div className={styles.formActions} style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "10px", borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "20px" }}>
             <button

@@ -79,9 +79,9 @@ export default function CommandPalette() {
                 <Activity size={16} className={styles.itemIcon} />
                 <span>Altas, Bajas y Cambios de Monto</span>
               </Command.Item>
-              <Command.Item onSelect={() => navigate("/dashboard/liquidacion")} className={styles.item}>
+              <Command.Item onSelect={() => navigate("/dashboard/liquidaciones")} className={styles.item}>
                 <FileCheck size={16} className={styles.itemIcon} />
-                <span>Generar Liquidación Mensual</span>
+                <span>Generar Devengamiento Mensual</span>
               </Command.Item>
               <Command.Item onSelect={() => navigate("/dashboard/ordenes")} className={styles.item}>
                 <CreditCard size={16} className={styles.itemIcon} />

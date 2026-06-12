@@ -251,10 +251,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { mes, anio } = body;
+    const { mes, anio, persona_ids } = body;
 
     if (!mes || !anio) {
       return NextResponse.json({ error: "Faltan parámetros 'mes' y 'anio'." }, { status: 400 });
+    }
+
+    const hasFilter = Array.isArray(persona_ids);
+    if (hasFilter && persona_ids.length === 0) {
+      return NextResponse.json({ error: "No se seleccionaron personas para devengar." }, { status: 400 });
     }
 
     // 1. Check Semester
@@ -283,7 +288,7 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (existing && existing.length > 0 && existing[0].estado_liquidacion !== "pendiente") {
-      return NextResponse.json({ error: "La liquidación está procesada o pagada y no se puede modificar." }, { status: 400 });
+      return NextResponse.json({ error: "El devengamiento está procesado o pagado y no se puede modificar." }, { status: 400 });
     }
 
     // 3. Clear existing pending liquidations for this month
@@ -321,6 +326,9 @@ export async function POST(req: NextRequest) {
       if (b.estado === "Baja" && new Date(b.fecha_baja) < startOfMonth) {
         continue;
       }
+      if (hasFilter && !persona_ids.includes(b.id)) {
+        continue;
+      }
 
       const altaDate = new Date(b.fecha_alta);
       const start = altaDate > startOfMonth ? altaDate : startOfMonth;
@@ -348,6 +356,9 @@ export async function POST(req: NextRequest) {
     // Process Monotributistas
     for (const m of (monotributistas || [])) {
       if (m.estado === "Baja" && new Date(m.fecha_baja) < startOfMonth) {
+        continue;
+      }
+      if (hasFilter && !persona_ids.includes(m.id)) {
         continue;
       }
 
@@ -385,16 +396,16 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     await supabase.from("audit_log").insert({
       usuario_id: user?.id,
-      accion: "Generación de Liquidación Mensual",
+      accion: "Generación de Devengamientos",
       tabla_afectada: "liquidaciones_mensuales",
-      datos_nuevos: { anio, mes, cantidad_registros: insertRows.length },
+      datos_nuevos: { anio, mes, cantidad_registros: insertRows.length, persona_ids_filtrados: hasFilter ? persona_ids.length : null },
     });
 
     return NextResponse.json({ success: true, count: insertRows.length });
 
   } catch (err: any) {
     console.error("Error generating liquidations:", err);
-    return NextResponse.json({ error: err.message || "Error al generar liquidaciones." }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Error al generar devengamientos." }, { status: 500 });
   }
 }
 

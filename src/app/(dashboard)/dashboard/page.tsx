@@ -46,19 +46,28 @@ import Link from "next/link";
 
 export default function DashboardPage() {
   const supabase = createClient();
-  const { selectedSemester, loading: semesterLoading } = useSemester();
+  const { semesters, selectedSemester, loading: semesterLoading } = useSemester();
 
   // Basic States
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"general" | "cobertura">("general");
 
-  // Filter States
+  // Temporal Filter States
+  const [periodType, setPeriodType] = useState<"semestre" | "mes" | "anio">("semestre");
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedSemesterNum, setSelectedSemesterNum] = useState<number>(1);
+  const [selectedMonth, setSelectedMonth] = useState<number>(1);
+
+  // Structure Filter States
   const [selectedSub, setSelectedSub] = useState<string>("");
+  const [selectedArea, setSelectedArea] = useState<string>("");
+  const [selectedResp, setSelectedResp] = useState<string>("");
 
   // DB Data States
   const [subsecretarias, setSubsecretarias] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [responsables, setResponsables] = useState<any[]>([]);
   const [becarios, setBecarios] = useState<any[]>([]);
   const [monotributistas, setMonotributistas] = useState<any[]>([]);
   const [ocs, setOcs] = useState<any[]>([]);
@@ -95,11 +104,11 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchData = async () => {
-    if (!selectedSemester) return;
+  const fetchData = async (targetSems: any[]) => {
+    if (targetSems.length === 0) return;
     setLoading(true);
     try {
-      // 1. Fetch subsecretarías & areas for lookup
+      // 1. Fetch subsecretarías, areas & responsables for lookup
       const { data: subs } = await supabase
         .from("subsecretarias")
         .select("*")
@@ -110,63 +119,80 @@ export default function DashboardPage() {
         .select("*")
         .eq("activa", true)
         .order("orden");
+      const { data: resps } = await supabase
+        .from("responsables")
+        .select("*")
+        .eq("activo", true)
+        .order("nombre_completo");
 
       setSubsecretarias(subs || []);
       setAreas(ars || []);
+      setResponsables(resps || []);
 
       // 2. Fetch movements (always from movements table for the year of the semester)
+      const year = targetSems[0].anio;
       const { data: movs } = await supabase
         .from("movimientos")
         .select("*")
-        .eq("anio", selectedSemester.anio);
+        .eq("anio", year);
       setMovements(movs || []);
 
-      // 3. Fetch semester data (live or snapshot)
-      if (selectedSemester.bloqueado) {
-        const { data: snapshot, error: snapErr } = await supabase
-          .from("snapshots_semestre")
+      let allBecs: any[] = [];
+      let allMonos: any[] = [];
+      let allOcs: any[] = [];
+
+      const blockedSems = targetSems.filter((s) => s.bloqueado);
+      const activeSems = targetSems.filter((s) => !s.bloqueado);
+
+      // 3. Query active tables if any target semester is active
+      if (activeSems.length > 0) {
+        const activeSemIds = activeSems.map((s) => s.id);
+        const { data: activeOcs } = await supabase
+          .from("ordenes_compromiso")
           .select("*")
-          .eq("semestre_id", selectedSemester.id)
-          .maybeSingle();
+          .in("semestre_id", activeSemIds);
+        if (activeOcs) allOcs.push(...activeOcs);
 
-        if (snapErr) throw snapErr;
-
-        if (snapshot) {
-          setBecarios(snapshot.nomina_becarios_snapshot || []);
-          setMonotributistas(snapshot.nomina_monos_snapshot || []);
-          setOcs(snapshot.ordenes_compromiso_snapshot || []);
-        } else {
-          setBecarios([]);
-          setMonotributistas([]);
-          setOcs([]);
-        }
-      } else {
-        // Query live active tables
-        const { data: becs, error: becsErr } = await supabase
+        const { data: becs } = await supabase
           .from("becarios")
           .select("*, subsecretarias(id, nombre), areas(id, nombre)")
           .eq("estado", "Activo");
-        if (becsErr) throw becsErr;
-
-        const { data: monos, error: monosErr } = await supabase
+        const { data: monos } = await supabase
           .from("monotributistas")
           .select("*, subsecretarias(id, nombre), areas(id, nombre)")
           .eq("estado", "Activo");
-        if (monosErr) throw monosErr;
 
-        const { data: activeOcs, error: ocsErr } = await supabase
-          .from("ordenes_compromiso")
-          .select("*")
-          .eq("semestre_id", selectedSemester.id);
-        if (ocsErr) throw ocsErr;
-
-        setBecarios(becs || []);
-        setMonotributistas(monos || []);
-        setOcs(activeOcs || []);
+        if (becs) allBecs.push(...becs);
+        if (monos) allMonos.push(...monos);
       }
 
-      // 4. Fetch alerts
-      await fetchAlerts(selectedSemester.id);
+      // 4. Query snapshots for blocked target semesters
+      if (blockedSems.length > 0) {
+        const blockedSemIds = blockedSems.map((s) => s.id);
+        const { data: snapshots } = await supabase
+          .from("snapshots_semestre")
+          .select("*")
+          .in("semestre_id", blockedSemIds);
+
+        snapshots?.forEach((snap) => {
+          if (snap.nomina_becarios_snapshot) allBecs.push(...snap.nomina_becarios_snapshot);
+          if (snap.nomina_monos_snapshot) allMonos.push(...snap.nomina_monos_snapshot);
+          if (snap.ordenes_compromiso_snapshot) allOcs.push(...snap.ordenes_compromiso_snapshot);
+        });
+      }
+
+      // Remove duplicate agents by ID (keeping the latest instance)
+      const uniqueBecsMap = new Map<string, any>();
+      allBecs.forEach((b) => uniqueBecsMap.set(b.id, b));
+      const uniqueMonosMap = new Map<string, any>();
+      allMonos.forEach((m) => uniqueMonosMap.set(m.id, m));
+
+      setBecarios(Array.from(uniqueBecsMap.values()));
+      setMonotributistas(Array.from(uniqueMonosMap.values()));
+      setOcs(allOcs);
+
+      // Fetch alerts using the first semester's ID as reference
+      await fetchAlerts(targetSems[0].id);
     } catch (err: any) {
       console.error("Error loading dashboard data:", err);
     } finally {
@@ -174,11 +200,55 @@ export default function DashboardPage() {
     }
   };
 
+  // Sync state values when global semester changes
   useEffect(() => {
     if (selectedSemester) {
-      fetchData();
+      setSelectedYear(selectedSemester.anio);
+      setSelectedSemesterNum(selectedSemester.numero_semestre);
+      setSelectedMonth(selectedSemester.numero_semestre === 1 ? 1 : 7);
     }
   }, [selectedSemester]);
+
+  // Target semester resolver
+  const targetSemesterNum = useMemo(() => {
+    if (periodType === "mes") {
+      return selectedMonth <= 6 ? 1 : 2;
+    }
+    if (periodType === "semestre") {
+      return selectedSemesterNum;
+    }
+    return 2; // Default for year
+  }, [periodType, selectedMonth, selectedSemesterNum]);
+
+  const targetSemester = useMemo(() => {
+    if (!selectedYear) return null;
+    let found = semesters.find(
+      (s) => s.anio === selectedYear && s.numero_semestre === targetSemesterNum
+    );
+    if (!found) {
+      found = semesters.find((s) => s.anio === selectedYear);
+    }
+    return found || null;
+  }, [semesters, selectedYear, targetSemesterNum]);
+
+  const targetSemesters = useMemo(() => {
+    if (periodType === "anio") {
+      return semesters.filter((s) => s.anio === selectedYear);
+    }
+    return targetSemester ? [targetSemester] : [];
+  }, [periodType, targetSemester, semesters, selectedYear]);
+
+  // Trigger data fetch when target semesters list changes
+  useEffect(() => {
+    if (targetSemesters && targetSemesters.length > 0) {
+      fetchData(targetSemesters);
+    }
+  }, [targetSemesters]);
+
+  const filteredAreasOptions = useMemo(() => {
+    if (!selectedSub) return [];
+    return areas.filter((a) => a.subsecretaria_id === selectedSub);
+  }, [areas, selectedSub]);
 
   // Helpers
   const getSubsecretariaName = (subId: string) => {
@@ -198,16 +268,79 @@ export default function DashboardPage() {
     });
   };
 
-  // 1. Filtering lists based on client dropdown selector
+  // Calculate the start and end dates of the selected period for filtering in-memory
+  const startAndEndDates = useMemo(() => {
+    const year = selectedYear;
+    if (periodType === "mes") {
+      const daysInMonth = new Date(year, selectedMonth, 0).getDate();
+      return {
+        start: new Date(year, selectedMonth - 1, 1),
+        end: new Date(year, selectedMonth - 1, daysInMonth, 23, 59, 59),
+      };
+    }
+    if (periodType === "semestre") {
+      if (selectedSemesterNum === 1) {
+        return {
+          start: new Date(year, 0, 1),
+          end: new Date(year, 5, 30, 23, 59, 59),
+        };
+      } else {
+        return {
+          start: new Date(year, 6, 1),
+          end: new Date(year, 11, 31, 23, 59, 59),
+        };
+      }
+    }
+    // Default for "anio":
+    return {
+      start: new Date(year, 0, 1),
+      end: new Date(year, 11, 31, 23, 59, 59),
+    };
+  }, [periodType, selectedYear, selectedSemesterNum, selectedMonth]);
+
+  // 1. Filter by Period (active agents during that time window)
+  const becariosFilteredByPeriod = useMemo(() => {
+    return becarios.filter((b) => {
+      const alta = new Date(b.fecha_alta + "T00:00:00");
+      if (alta > startAndEndDates.end) return false;
+      if (b.estado === "Baja" && b.fecha_baja) {
+        const baja = new Date(b.fecha_baja + "T00:00:00");
+        if (baja < startAndEndDates.start) return false;
+      }
+      return true;
+    });
+  }, [becarios, startAndEndDates]);
+
+  const monotributistasFilteredByPeriod = useMemo(() => {
+    return monotributistas.filter((m) => {
+      const alta = new Date(m.fecha_alta + "T00:00:00");
+      if (alta > startAndEndDates.end) return false;
+      if (m.estado === "Baja" && m.fecha_baja) {
+        const baja = new Date(m.fecha_baja + "T00:00:00");
+        if (baja < startAndEndDates.start) return false;
+      }
+      return true;
+    });
+  }, [monotributistas, startAndEndDates]);
+
+  // 2. Filter by Structure (Subsecretaría, Área, Responsable)
   const becariosFiltered = useMemo(() => {
-    if (!selectedSub) return becarios;
-    return becarios.filter((b) => b.subsecretaria_id === selectedSub);
-  }, [becarios, selectedSub]);
+    return becariosFilteredByPeriod.filter((b) => {
+      if (selectedSub && b.subsecretaria_id !== selectedSub) return false;
+      if (selectedArea && b.area_id !== selectedArea) return false;
+      if (selectedResp && b.responsable_id !== selectedResp) return false;
+      return true;
+    });
+  }, [becariosFilteredByPeriod, selectedSub, selectedArea, selectedResp]);
 
   const monosFiltered = useMemo(() => {
-    if (!selectedSub) return monotributistas;
-    return monotributistas.filter((m) => m.subsecretaria_id === selectedSub);
-  }, [monotributistas, selectedSub]);
+    return monotributistasFilteredByPeriod.filter((m) => {
+      if (selectedSub && m.subsecretaria_id !== selectedSub) return false;
+      if (selectedArea && m.area_id !== selectedArea) return false;
+      if (selectedResp && m.responsable_id !== selectedResp) return false;
+      return true;
+    });
+  }, [monotributistasFilteredByPeriod, selectedSub, selectedArea, selectedResp]);
 
   // Sets of filtered person IDs to filter LineChart movements
   const filteredPersonIds = useMemo(() => {
@@ -422,6 +555,8 @@ export default function DashboardPage() {
         monos: number;
         personal: number;
         budget: number;
+        budgetBase: number;
+        budgetActiva: number;
       };
     } = {};
 
@@ -434,6 +569,8 @@ export default function DashboardPage() {
           monos: 0,
           personal: 0,
           budget: 0,
+          budgetBase: 0,
+          budgetActiva: 0,
         };
       }
     });
@@ -442,6 +579,8 @@ export default function DashboardPage() {
       if (dataMap[b.area_id]) {
         dataMap[b.area_id].becarios += 1;
         dataMap[b.area_id].personal += 1;
+        dataMap[b.area_id].budgetBase += Number(b.importe_mensual_beca || 0) * 6;
+        dataMap[b.area_id].budgetActiva += Number(b.importe_tarjeta_activa || 0) * 6;
         dataMap[b.area_id].budget += Number(b.importe_total || 0) * 6;
       }
     });
@@ -450,6 +589,8 @@ export default function DashboardPage() {
       if (dataMap[m.area_id]) {
         dataMap[m.area_id].monos += 1;
         dataMap[m.area_id].personal += 1;
+        dataMap[m.area_id].budgetBase += Number(m.importe_mensual_monotributo || 0) * 6;
+        dataMap[m.area_id].budgetActiva += Number(m.importe_tarjeta_activa || 0) * 6;
         dataMap[m.area_id].budget += Number(m.importe_total || 0) * 6;
       }
     });
@@ -578,14 +719,97 @@ export default function DashboardPage() {
             Panel de control ejecutivo de asignaciones y cobertura institucional.
           </p>
         </div>
+      </div>
 
-        <div className={styles.headerActions}>
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <span className={styles.filterLabel}>Filtrar Subsecretaría:</span>
+      {/* FILTROS GLOBAL INTEGRADO */}
+      <div className={`${styles.filtersWrapper} glass-panel`}>
+        {/* Fila 1: Temporal */}
+        <div className={styles.filterRow}>
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>Temporalidad:</span>
+            <div className={styles.periodTabs}>
+              <button
+                type="button"
+                className={`${styles.periodTab} ${periodType === "semestre" ? styles.periodTabActive : ""}`}
+                onClick={() => setPeriodType("semestre")}
+              >
+                Por Semestre
+              </button>
+              <button
+                type="button"
+                className={`${styles.periodTab} ${periodType === "mes" ? styles.periodTabActive : ""}`}
+                onClick={() => setPeriodType("mes")}
+              >
+                Por Mes
+              </button>
+              <button
+                type="button"
+                className={`${styles.periodTab} ${periodType === "anio" ? styles.periodTabActive : ""}`}
+                onClick={() => setPeriodType("anio")}
+              >
+                Todo el Año
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>Año:</span>
             <select
-              className={styles.subselect}
+              className={styles.filterSelect}
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            >
+              {Array.from(new Set(semesters.map((s) => s.anio))).sort((a, b) => b - a).map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {periodType === "semestre" && (
+            <div className={styles.filterGroup}>
+              <span className={styles.filterLabel}>Semestre:</span>
+              <select
+                className={styles.filterSelect}
+                value={selectedSemesterNum}
+                onChange={(e) => setSelectedSemesterNum(parseInt(e.target.value))}
+              >
+                <option value={1}>1º Semestre (1S)</option>
+                <option value={2}>2º Semestre (2S)</option>
+              </select>
+            </div>
+          )}
+
+          {periodType === "mes" && (
+            <div className={styles.filterGroup}>
+              <span className={styles.filterLabel}>Mes:</span>
+              <select
+                className={styles.filterSelect}
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+              >
+                {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m, idx) => (
+                  <option key={idx} value={idx + 1}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Fila 2: Orgánico / Responsable */}
+        <div className={styles.filterRow} style={{ marginTop: "12px", borderTop: "1px solid rgba(255, 255, 255, 0.05)", paddingTop: "12px" }}>
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>Subsecretaría:</span>
+            <select
+              className={styles.filterSelect}
               value={selectedSub}
-              onChange={(e) => setSelectedSub(e.target.value)}
+              onChange={(e) => {
+                setSelectedSub(e.target.value);
+                setSelectedArea("");
+              }}
             >
               <option value="">Todas las Subsecretarías</option>
               {subsecretarias.map((s) => (
@@ -595,11 +819,44 @@ export default function DashboardPage() {
               ))}
             </select>
           </div>
+
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>Área:</span>
+            <select
+              className={styles.filterSelect}
+              value={selectedArea}
+              onChange={(e) => setSelectedArea(e.target.value)}
+              disabled={!selectedSub}
+            >
+              <option value="">Todas las Áreas</option>
+              {filteredAreasOptions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>Responsable:</span>
+            <select
+              className={styles.filterSelect}
+              value={selectedResp}
+              onChange={(e) => setSelectedResp(e.target.value)}
+            >
+              <option value="">Todos los Responsables</option>
+              {responsables.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.nombre_completo}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* 2. Banner de consulta histórica si está bloqueado */}
-      {selectedSemester.bloqueado && (
+      {targetSemester?.bloqueado && (
         <div
           style={{
             display: "flex",
@@ -616,7 +873,7 @@ export default function DashboardPage() {
         >
           <Lock size={16} style={{ flexShrink: 0 }} />
           <span>
-            Modo Historial Activo: Visualizando instantánea congelada del Semestre {selectedSemester.nombre_display}.
+            Modo Historial Activo: Visualizando instantánea congelada del Semestre {targetSemester.nombre_display || `${targetSemester.numero_semestre}S ${targetSemester.anio}`}.
           </span>
         </div>
       )}
@@ -671,23 +928,31 @@ export default function DashboardPage() {
       <div className={styles.kpiGrid}>
         <div className={`${styles.kpiCard} glass-panel ${styles.kpiCard_blue}`}>
           <div className={styles.kpiHeader}>
-            <span className={styles.kpiTitle}>Becarios Activos</span>
+            <span className={styles.kpiTitle}>Becas Mensual</span>
             <Users className={styles.kpiIcon} size={16} />
           </div>
-          <p className={styles.kpiValue}>{metrics.totalBecarios}</p>
-          <div className={styles.kpiSubtext}>
-            <span>Beca Base + Tarjeta Activa (10%)</span>
+          <p className={styles.kpiValue} style={{ fontSize: "20px", marginBottom: "8px" }}>
+            {formatCurrency(metrics.monthlyBecasTotal)}
+          </p>
+          <div className={styles.kpiSubtext} style={{ flexDirection: "column", alignItems: "flex-start", gap: "2px" }}>
+            <span style={{ fontWeight: "600", color: "var(--text-secondary)" }}>{metrics.totalBecarios} Becarios Activos</span>
+            <span className="mono" style={{ fontSize: "11px" }}>Base: {formatCurrency(metrics.monthlyBecasBase)}</span>
+            <span className="mono" style={{ fontSize: "11px" }}>Activa: {formatCurrency(metrics.monthlyBecasActiva)}</span>
           </div>
         </div>
 
         <div className={`${styles.kpiCard} glass-panel ${styles.kpiCard_purple}`}>
           <div className={styles.kpiHeader}>
-            <span className={styles.kpiTitle}>Monotributistas</span>
+            <span className={styles.kpiTitle}>Monotributos Mensual</span>
             <Briefcase className={styles.kpiIcon} size={16} />
           </div>
-          <p className={styles.kpiValue}>{metrics.totalMonos}</p>
-          <div className={styles.kpiSubtext}>
-            <span>Niveles de Categoría vigentes</span>
+          <p className={styles.kpiValue} style={{ fontSize: "20px", marginBottom: "8px" }}>
+            {formatCurrency(metrics.monthlyMonosTotal)}
+          </p>
+          <div className={styles.kpiSubtext} style={{ flexDirection: "column", alignItems: "flex-start", gap: "2px" }}>
+            <span style={{ fontWeight: "600", color: "var(--text-secondary)" }}>{metrics.totalMonos} Monotributistas</span>
+            <span className="mono" style={{ fontSize: "11px" }}>Base: {formatCurrency(metrics.monthlyMonosBase)}</span>
+            <span className="mono" style={{ fontSize: "11px" }}>Activa: {formatCurrency(metrics.monthlyMonosActiva)}</span>
           </div>
         </div>
 
@@ -697,8 +962,9 @@ export default function DashboardPage() {
             <TrendingUp className={styles.kpiIcon} size={16} />
           </div>
           <p className={styles.kpiValue}>{formatCurrency(metrics.monthlyGrandTotal)}</p>
-          <div className={styles.kpiSubtext}>
-            <span>Base: {formatCurrency(metrics.monthlyBecasBase + metrics.monthlyMonosBase)}</span>
+          <div className={styles.kpiSubtext} style={{ flexDirection: "column", alignItems: "flex-start", gap: "2px" }}>
+            <span className="mono">Base: {formatCurrency(metrics.monthlyBecasBase + metrics.monthlyMonosBase)}</span>
+            <span className="mono">Activa: {formatCurrency(metrics.monthlyBecasActiva + metrics.monthlyMonosActiva)}</span>
           </div>
         </div>
 
@@ -708,8 +974,9 @@ export default function DashboardPage() {
             <Building2 className={styles.kpiIcon} size={16} />
           </div>
           <p className={styles.kpiValue}>{formatCurrency(metrics.semestralGrandTotal)}</p>
-          <div className={styles.kpiSubtext}>
-            <span>Proyección para 6 meses de nómina</span>
+          <div className={styles.kpiSubtext} style={{ flexDirection: "column", alignItems: "flex-start", gap: "2px" }}>
+            <span className="mono">Base: {formatCurrency((metrics.monthlyBecasBase + metrics.monthlyMonosBase) * 6)}</span>
+            <span className="mono">Activa: {formatCurrency((metrics.monthlyBecasActiva + metrics.monthlyMonosActiva) * 6)}</span>
           </div>
         </div>
 
@@ -720,8 +987,9 @@ export default function DashboardPage() {
               <TrendingDown className={styles.kpiIcon} size={16} />
             </div>
             <p className={styles.kpiValue}>{metrics.ocProgress.toFixed(1)}%</p>
-            <div className={styles.kpiSubtext}>
+            <div className={styles.kpiSubtext} style={{ flexDirection: "column", alignItems: "flex-start", gap: "2px" }}>
               <span>Ejecutado: {formatCurrency(metrics.ocTotalExecuted)}</span>
+              <span>Remanente: {formatCurrency(metrics.ocTotalRemaining)}</span>
             </div>
           </div>
         )}
@@ -848,7 +1116,7 @@ export default function DashboardPage() {
           {/* Chart 3: LineChart Altas vs Bajas */}
           <div className={`${styles.chartCard} ${styles.chartCardLarge} glass-panel`}>
             <div className={styles.chartHeader}>
-              <h3>Curva Temporal de Movimientos (Altas vs Bajas - {selectedSemester.anio})</h3>
+              <h3>Curva Temporal de Movimientos (Altas vs Bajas - {selectedYear})</h3>
               <button
                 className={styles.downloadBtn}
                 onClick={() => downloadChart("line-chart-container", "curva_altas_bajas.png")}
@@ -1027,8 +1295,12 @@ export default function DashboardPage() {
                           <td style={{ textAlign: "center" }} className="mono font-semibold">
                             {item.personal}
                           </td>
-                          <td style={{ textAlign: "right" }} className="mono font-bold text-emerald">
-                            {formatCurrency(item.budget)}
+                          <td style={{ textAlign: "right" }}>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                              <span className="mono font-bold text-emerald">{formatCurrency(item.budget)}</span>
+                              <span className="text-secondary" style={{ fontSize: "11px" }}>Base: {formatCurrency(item.budgetBase)}</span>
+                              <span className="text-secondary" style={{ fontSize: "11px" }}>Activa: {formatCurrency(item.budgetActiva)}</span>
+                            </div>
                           </td>
                           <td>
                             <div className={styles.participationContainer}>

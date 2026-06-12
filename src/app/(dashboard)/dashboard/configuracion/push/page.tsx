@@ -28,7 +28,7 @@ export default function PushConfigPage() {
 
   // Trigger form states
   const [title, setTitle] = useState("Alerta de Seguridad - Nómina");
-  const [body, setBody] = useState("Se ha procesado una nueva liquidación mensual.");
+  const [body, setBody] = useState("Se ha procesado un nuevo devengamiento mensual.");
   const [targetUrl, setTargetUrl] = useState("/dashboard/liquidaciones");
   const [triggering, setTriggering] = useState(false);
 

@@ -115,7 +115,27 @@ export default function MonotributistasPage() {
 
   // Baja Form States
   const [bajaMotivo, setBajaMotivo] = useState("");
-  const [bajaFecha, setBajaFecha] = useState(new Date().toISOString().split("T")[0]);
+  const [bajaMes, setBajaMes] = useState<number>(new Date().getMonth() + 1);
+  const [bajaAnio, setBajaAnio] = useState<number>(new Date().getFullYear());
+
+  // Alta and Edit Period States
+  const [altaMes, setAltaMes] = useState<number>(new Date().getMonth() + 1);
+  const [altaAnio, setAltaAnio] = useState<number>(new Date().getFullYear());
+  const [editMontoMes, setEditMontoMes] = useState<number>(new Date().getMonth() + 1);
+  const [editMontoAnio, setEditMontoAnio] = useState<number>(new Date().getFullYear());
+
+  const calculatedBajaFecha = useMemo(() => {
+    const date = new Date(bajaAnio, bajaMes - 1, 0); // 0th day of current month is last day of previous month
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, [bajaMes, bajaAnio]);
+
+  const calculatedAltaFecha = useMemo(() => {
+    const m = String(altaMes).padStart(2, "0");
+    return `${altaAnio}-${m}-01`;
+  }, [altaMes, altaAnio]);
 
   // React Table Sorting
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -173,18 +193,24 @@ export default function MonotributistasPage() {
             subsecretarias(id, nombre),
             areas(id, nombre),
             responsables(id, nombre_completo),
-            categorias_monotributistas(id, letra, monto, total),
-            persona_tags(
-              tags(id, nombre, color)
-            )
+            categorias_monotributistas(id, letra, monto, total)
           `)
           .order("apellido_nombre", { ascending: true });
 
         if (monosErr) throw monosErr;
 
+        // Fetch persona_tags separately since there's no direct foreign key
+        const { data: pts } = await supabase
+          .from("persona_tags")
+          .select("persona_id, tags(id, nombre, color)")
+          .eq("tipo_persona", "monotributista");
+
         const transformedMonos = (monos || []).map((m: any) => ({
           ...m,
-          tags: m.persona_tags?.map((pt: any) => pt.tags).filter(Boolean) || []
+          tags: (pts || [])
+            .filter((pt: any) => pt.persona_id === m.id)
+            .map((pt: any) => pt.tags)
+            .filter(Boolean) || []
         }));
         setMonotributistas(transformedMonos);
       }
@@ -212,6 +238,7 @@ export default function MonotributistasPage() {
     control,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -246,6 +273,31 @@ export default function MonotributistasPage() {
 
   const selectedSub = watch("subsecretaria_id");
   const selectedCat = watch("categoria_mono_id");
+
+  useEffect(() => {
+    setValue("fecha_alta", calculatedAltaFecha);
+  }, [calculatedAltaFecha, setValue]);
+
+  useEffect(() => {
+    if (isAddOpen) {
+      setAltaMes(new Date().getMonth() + 1);
+      setAltaAnio(new Date().getFullYear());
+    }
+  }, [isAddOpen]);
+
+  useEffect(() => {
+    if (isBajaOpen) {
+      setBajaMes(new Date().getMonth() + 1);
+      setBajaAnio(new Date().getFullYear());
+    }
+  }, [isBajaOpen]);
+
+  useEffect(() => {
+    if (isEditOpen) {
+      setEditMontoMes(new Date().getMonth() + 1);
+      setEditMontoAnio(new Date().getFullYear());
+    }
+  }, [isEditOpen]);
 
   // Filter Areas based on selected Subsecretaría in form
   const filteredAreasForForm = useMemo(() => {
@@ -312,7 +364,7 @@ export default function MonotributistasPage() {
         estado: "Activo",
       };
 
-      const { error } = await supabase.from("monotributistas").insert(payload);
+      const { data: newPerson, error } = await supabase.from("monotributistas").insert(payload).select("id").single();
       if (error) throw error;
 
       // Log audit
@@ -322,6 +374,18 @@ export default function MonotributistasPage() {
         accion: "Creación de Monotributista",
         tabla_afectada: "monotributistas",
         datos_nuevos: payload,
+      });
+
+      // Log movement in movimientos table
+      await supabase.from("movimientos").insert({
+        tipo_persona: "monotributista",
+        persona_id: newPerson.id,
+        tipo_movimiento: "alta",
+        anio: altaAnio,
+        mes: altaMes,
+        descripcion: "Alta en el sistema para el período",
+        datos_nuevos: { estado: "Activo", fecha_alta: data.fecha_alta },
+        usuario_id: user?.id,
       });
 
       toast.success("Monotributista registrado exitosamente.");
@@ -361,8 +425,8 @@ export default function MonotributistasPage() {
           tipo_persona: "monotributista",
           persona_id: selectedPerson.id,
           tipo_movimiento: "cambio_monto",
-          anio: activeSemestre?.anio || new Date().getFullYear(),
-          mes: new Date().getMonth() + 1,
+          anio: editMontoAnio,
+          mes: editMontoMes,
           descripcion: `Cambio de monto: de $${selectedPerson.importe_mensual_monotributo} a $${selectedCategory.monto}`,
           datos_anteriores: {
             monto: selectedPerson.importe_mensual_monotributo,
@@ -396,7 +460,7 @@ export default function MonotributistasPage() {
         .from("monotributistas")
         .update({
           estado: "Baja",
-          fecha_baja: bajaFecha,
+          fecha_baja: calculatedBajaFecha,
           motivo_baja: bajaMotivo,
         })
         .eq("id", selectedPerson.id);
@@ -409,11 +473,11 @@ export default function MonotributistasPage() {
         tipo_persona: "monotributista",
         persona_id: selectedPerson.id,
         tipo_movimiento: "baja",
-        anio: parseInt(bajaFecha.split("-")[0]),
-        mes: parseInt(bajaFecha.split("-")[1]),
+        anio: bajaAnio,
+        mes: bajaMes,
         descripcion: `Baja procesada por motivo: ${bajaMotivo}`,
         datos_anteriores: { estado: "Activo" },
-        datos_nuevos: { estado: "Baja", fecha_baja: bajaFecha, motivo_baja: bajaMotivo },
+        datos_nuevos: { estado: "Baja", fecha_baja: calculatedBajaFecha, motivo_baja: bajaMotivo },
         usuario_id: user?.id,
       });
 
@@ -587,11 +651,29 @@ export default function MonotributistasPage() {
         ),
       },
       {
+        accessorKey: "importe_mensual_monotributo",
+        header: "Monto Base",
+        cell: (info) => (
+          <span className="mono text-secondary">
+            ${Number(info.getValue() as number || 0).toLocaleString("es-AR")}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "importe_tarjeta_activa",
+        header: "Tarjeta Activa",
+        cell: (info) => (
+          <span className="mono text-secondary">
+            ${Number(info.getValue() as number || 0).toLocaleString("es-AR")}
+          </span>
+        ),
+      },
+      {
         accessorKey: "importe_total",
         header: "Monto Total",
         cell: (info) => (
           <span className="mono font-bold text-emerald">
-            ${Number(info.getValue() as number).toLocaleString("es-AR")}
+            ${Number(info.getValue() as number || 0).toLocaleString("es-AR")}
           </span>
         ),
       },
@@ -1083,10 +1165,49 @@ export default function MonotributistasPage() {
 
               <div className={styles.formRow}>
                 <div className={styles.formGroup}>
-                  <label>Fecha de Alta en Nómina *</label>
-                  <input type="date" className="input-field" {...register("fecha_alta")} />
-                  {errors.fecha_alta && <span className={styles.formError}>{errors.fecha_alta.message}</span>}
+                  <label>Mes de Inicio de Actividades *</label>
+                  <select
+                    className="input-field"
+                    value={altaMes}
+                    onChange={(e) => setAltaMes(Number(e.target.value))}
+                  >
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const name = new Date(2026, i, 1).toLocaleString("es-AR", { month: "long" });
+                      const capName = name.charAt(0).toUpperCase() + name.slice(1);
+                      return (
+                        <option key={i + 1} value={i + 1}>
+                          {capName}
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
+                <div className={styles.formGroup}>
+                  <label>Año de Inicio *</label>
+                  <select
+                    className="input-field"
+                    value={altaAnio}
+                    onChange={(e) => setAltaAnio(Number(e.target.value))}
+                  >
+                    {Array.from({ length: 5 }, (_, i) => {
+                      const y = new Date().getFullYear() - 2 + i;
+                      return (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+              <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "8px", padding: "12px", fontSize: "13.5px", color: "#10b981", marginBottom: "16px" }}>
+                📅 <strong>Fecha efectiva de alta:</strong> {
+                  new Date(altaAnio, altaMes - 1, 1).toLocaleDateString("es-AR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric"
+                  })
+                } (primer día del período administrativo seleccionado).
               </div>
             </div>
           )}
@@ -1332,6 +1453,55 @@ export default function MonotributistasPage() {
                 </div>
               )}
 
+              {/* Period of application for category change */}
+              {selectedPerson && selectedCat && selectedCat !== selectedPerson.categoria_mono_id && (
+                <div style={{ marginTop: "16px", background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.2)", borderRadius: "8px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px", marginBottom: "16px" }}>
+                  <h4 style={{ fontSize: "14px", fontWeight: "600", color: "#f59e0b", margin: 0 }}>
+                    ⚠️ Aplicación del Cambio de Categoría
+                  </h4>
+                  <p className="text-secondary" style={{ fontSize: "12.5px", margin: 0 }}>
+                    Ha modificado la categoría de monotributo. Seleccione el período administrativo en el que entrará en vigencia este cambio de monto:
+                  </p>
+                  <div style={{ display: "flex", gap: "12px" }}>
+                    <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                      <label>Mes de Vigencia</label>
+                      <select
+                        className="input-field"
+                        value={editMontoMes}
+                        onChange={(e) => setEditMontoMes(Number(e.target.value))}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => {
+                          const name = new Date(2026, i, 1).toLocaleString("es-AR", { month: "long" });
+                          const capName = name.charAt(0).toUpperCase() + name.slice(1);
+                          return (
+                            <option key={i + 1} value={i + 1}>
+                              {capName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                      <label>Año</label>
+                      <select
+                        className="input-field"
+                        value={editMontoAnio}
+                        onChange={(e) => setEditMontoAnio(Number(e.target.value))}
+                      >
+                        {Array.from({ length: 5 }, (_, i) => {
+                          const y = new Date().getFullYear() - 2 + i;
+                          return (
+                            <option key={y} value={y}>
+                              {y}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className={styles.formRow}>
                 <div className={styles.formGroup}>
                   <label>Fecha de Alta en Nómina *</label>
@@ -1446,19 +1616,57 @@ export default function MonotributistasPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           <div className={styles.warningBox}>
             <AlertTriangle size={24} className="text-amber" />
-            <p>
+            <p className="text-secondary" style={{ fontSize: "14px", lineHeight: "1.5" }}>
               Está por procesar la baja de <strong>{selectedPerson?.apellido_nombre}</strong>. El registro se mantendrá en estado inactivo con fines históricos.
             </p>
           </div>
 
-          <div className={styles.formGroup}>
-            <label>Fecha de Baja *</label>
-            <input
-              type="date"
-              className="input-field"
-              value={bajaFecha}
-              onChange={(e) => setBajaFecha(e.target.value)}
-            />
+          <div style={{ display: "flex", gap: "12px" }}>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label>Mes Administrativo *</label>
+              <select
+                className="input-field"
+                value={bajaMes}
+                onChange={(e) => setBajaMes(Number(e.target.value))}
+              >
+                {Array.from({ length: 12 }, (_, i) => {
+                  const name = new Date(2026, i, 1).toLocaleString("es-AR", { month: "long" });
+                  const capName = name.charAt(0).toUpperCase() + name.slice(1);
+                  return (
+                    <option key={i + 1} value={i + 1}>
+                      {capName}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label>Año *</label>
+              <select
+                className="input-field"
+                value={bajaAnio}
+                onChange={(e) => setBajaAnio(Number(e.target.value))}
+              >
+                {Array.from({ length: 5 }, (_, i) => {
+                  const y = new Date().getFullYear() - 2 + i;
+                  return (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ background: "rgba(244, 63, 94, 0.08)", border: "1px solid rgba(244, 63, 94, 0.2)", borderRadius: "8px", padding: "12px", fontSize: "13.5px", color: "#f43f5e" }}>
+            📅 <strong>Fecha efectiva de baja:</strong> {
+              new Date(bajaAnio, bajaMes - 1, 0).toLocaleDateString("es-AR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric"
+              })
+            } (último día del mes anterior, cobrando hasta ese mes inclusive).
           </div>
 
           <div className={styles.formGroup}>

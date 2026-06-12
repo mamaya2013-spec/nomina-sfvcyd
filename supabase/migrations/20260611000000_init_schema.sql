@@ -210,6 +210,8 @@ CREATE TABLE public.documentos (
     tamano_bytes BIGINT,
     fecha_emision DATE,
     fecha_vencimiento DATE,
+    fecha_turno DATE,
+    es_turno BOOLEAN DEFAULT FALSE,
     version INT DEFAULT 1,
     estado_revision TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado_revision IN ('pendiente', 'aprobado', 'rechazado')),
     observaciones_revision TEXT,

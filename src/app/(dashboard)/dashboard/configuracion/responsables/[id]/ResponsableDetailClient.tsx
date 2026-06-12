@@ -296,7 +296,9 @@ export default function ResponsableDetailClient({ id }: ResponsableDetailClientP
                   <th>DNI</th>
                   <th>Área</th>
                   <th>Categoría</th>
-                  <th>Monto Mensual</th>
+                  <th>Monto Base</th>
+                  <th>Tarjeta Activa</th>
+                  <th>Monto Total</th>
                   <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
@@ -304,7 +306,7 @@ export default function ResponsableDetailClient({ id }: ResponsableDetailClientP
               <tbody>
                 {becarios.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className={styles.noData}>
+                    <td colSpan={9} className={styles.noData}>
                       No hay becarios asignados a este responsable.
                     </td>
                   </tr>
@@ -323,6 +325,12 @@ export default function ResponsableDetailClient({ id }: ResponsableDetailClientP
                         <span className={styles.catBadge}>
                           Cat. {b.categorias_becas?.numero_categoria || "-"}
                         </span>
+                      </td>
+                      <td className="mono text-secondary">
+                        ${Number(b.importe_mensual_beca || 0).toLocaleString("es-AR")}
+                      </td>
+                      <td className="mono text-secondary">
+                        ${Number(b.importe_tarjeta_activa || 0).toLocaleString("es-AR")}
                       </td>
                       <td className="mono font-bold text-emerald">
                         ${Number(b.importe_total || 0).toLocaleString("es-AR")}
@@ -352,7 +360,9 @@ export default function ResponsableDetailClient({ id }: ResponsableDetailClientP
                   <th>DNI</th>
                   <th>Área</th>
                   <th>Categoría ARCA (Letra)</th>
-                  <th>Monto Mensual</th>
+                  <th>Monto Base</th>
+                  <th>Tarjeta Activa</th>
+                  <th>Monto Total</th>
                   <th>Estado</th>
                   <th>Acciones</th>
                 </tr>
@@ -360,7 +370,7 @@ export default function ResponsableDetailClient({ id }: ResponsableDetailClientP
               <tbody>
                 {monotributistas.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className={styles.noData}>
+                    <td colSpan={9} className={styles.noData}>
                       No hay monotributistas asignados a este responsable.
                     </td>
                   </tr>
@@ -384,6 +394,12 @@ export default function ResponsableDetailClient({ id }: ResponsableDetailClientP
                             {m.categorias_monotributistas?.descripcion_categoria || ""}
                           </span>
                         </div>
+                      </td>
+                      <td className="mono text-secondary">
+                        ${Number(m.importe_mensual_monotributo || 0).toLocaleString("es-AR")}
+                      </td>
+                      <td className="mono text-secondary">
+                        ${Number(m.importe_tarjeta_activa || 0).toLocaleString("es-AR")}
                       </td>
                       <td className="mono font-bold text-emerald">
                         ${Number(m.importe_total || 0).toLocaleString("es-AR")}

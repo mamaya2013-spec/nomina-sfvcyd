@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "nomina-sfvcyd" generated at 2026-06-11T11:18:12.358Z.

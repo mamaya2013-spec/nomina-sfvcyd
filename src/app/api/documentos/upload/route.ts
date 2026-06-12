@@ -14,6 +14,9 @@ export async function POST(req: NextRequest) {
     const tipoDocumento = formData.get("tipo_documento") as string | null;
     const fechaEmisionStr = formData.get("fecha_emision") as string | null;
     const fechaVencimientoStr = formData.get("fecha_vencimiento") as string | null;
+    const esTurnoStr = formData.get("es_turno") as string | null;
+    const fechaTurnoStr = formData.get("fecha_turno") as string | null;
+    const campanaId = formData.get("campana_id") as string | null;
 
     if (!file || !personaId || !tipoPersona || !tipoDocumento) {
       return NextResponse.json({ error: "Faltan parámetros obligatorios para la carga del archivo." }, { status: 400 });
@@ -81,13 +84,32 @@ export async function POST(req: NextRequest) {
       insertData.fecha_vencimiento = fechaVencimientoStr;
     }
 
+    if (esTurnoStr === "true") {
+      insertData.es_turno = true;
+    }
+
+    if (fechaTurnoStr && fechaTurnoStr.trim() !== "") {
+      insertData.fecha_turno = fechaTurnoStr;
+    }
+
+    if (campanaId && campanaId.trim() !== "") {
+      insertData.campana_id = campanaId;
+    }
+
     // Check if there's already an active document of this type, we can deactivate/delete or update it
-    const { data: existingDoc } = await supabase
+    const existingDocQuery = supabase
       .from("documentos")
       .select("id, url_supabase")
       .eq("persona_id", personaId)
-      .eq("tipo_documento", tipoDocumento)
-      .limit(1);
+      .eq("tipo_documento", tipoDocumento);
+
+    if (campanaId && campanaId.trim() !== "") {
+      existingDocQuery.eq("campana_id", campanaId);
+    } else {
+      existingDocQuery.is("campana_id", null);
+    }
+
+    const { data: existingDoc } = await existingDocQuery.limit(1);
 
     if (existingDoc && existingDoc.length > 0) {
       // Delete old file from storage if wanted (optional, we can upsert in db)
@@ -144,13 +166,66 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Recalculate campaign status if campanaId is provided
+    if (campanaId && campanaId.trim() !== "") {
+      const { data: camp } = await supabase
+        .from("campanas_documentacion")
+        .select("tipo_documentos_requeridos")
+        .eq("id", campanaId)
+        .single();
+      const requiredDocs = (camp?.tipo_documentos_requeridos || []) as string[];
+
+      const { data: personDocs } = await supabase
+        .from("documentos")
+        .select("tipo_documento, estado_revision")
+        .eq("persona_id", personaId)
+        .eq("campana_id", campanaId);
+
+      let allApproved = true;
+      let anyRejected = false;
+
+      for (const reqType of requiredDocs) {
+        const matchingDoc = reqType === tipoDocumento
+          ? { estado_revision: "pendiente" }
+          : (personDocs || []).find((d) => d.tipo_documento === reqType);
+
+        if (!matchingDoc) {
+          allApproved = false;
+        } else {
+          if (matchingDoc.estado_revision === "rechazado") {
+            anyRejected = true;
+          }
+          if (matchingDoc.estado_revision !== "aprobado") {
+            allApproved = false;
+          }
+        }
+      }
+
+      let newDeliveryStatus: "pendiente" | "entregado" | "rechazado" = "pendiente";
+      if (allApproved) {
+        newDeliveryStatus = "entregado";
+      } else if (anyRejected) {
+        newDeliveryStatus = "rechazado";
+      }
+
+      await supabase
+        .from("campana_entregas")
+        .update({
+          estado_entrega: newDeliveryStatus,
+          fecha_entrega: allApproved ? new Date().toISOString().split("T")[0] : null,
+          observaciones: null, // Clear old admin comments upon re-upload
+        })
+        .eq("campana_id", campanaId)
+        .eq("persona_id", personaId);
+    }
+
     // 5. Audit Log
     await supabase.from("audit_log").insert({
       usuario_id: user?.id,
       accion: "Carga de Documentación",
       tabla_afectada: "documentos",
       registro_id: savedDoc.id,
-      datos_nuevos: { tipo_documento: tipoDocumento, nombre_archivo: file.name },
+      datos_nuevos: { tipo_documento: tipoDocumento, nombre_archivo: file.name, campana_id: campanaId || null },
     });
 
     return NextResponse.json({ success: true, documento: savedDoc });

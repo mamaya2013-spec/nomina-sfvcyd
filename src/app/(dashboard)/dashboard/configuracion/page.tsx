@@ -26,6 +26,16 @@ export default function ConfiguracionPage() {
           </div>
         </Link>
 
+        <Link href="/dashboard/configuracion/organica" className={`${styles.card} glass-panel glass-panel-hover`}>
+          <div className={styles.iconWrapper}>
+            <Building2 size={28} className="text-pink" />
+          </div>
+          <div className={styles.cardContent}>
+            <h3>Estructura Orgánica</h3>
+            <p>Administre las subsecretarías, áreas operativas y prioridades de visualización.</p>
+          </div>
+        </Link>
+
         <Link href="/dashboard/configuracion/tags" className={`${styles.card} glass-panel glass-panel-hover`}>
           <div className={styles.iconWrapper}>
             <Tag size={28} className="text-purple" />

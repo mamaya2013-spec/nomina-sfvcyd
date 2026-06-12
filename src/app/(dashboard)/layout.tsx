@@ -44,7 +44,7 @@ const menuItems: MenuItem[] = [
   { name: "Movimientos", path: "/dashboard/movimientos", icon: Activity },
   { name: "Semestres", path: "/dashboard/montos", icon: Calendar },
   { name: "Órdenes de Comp.", path: "/dashboard/ordenes", icon: CreditCard },
-  { name: "Liquidaciones", path: "/dashboard/liquidaciones", icon: FileCheck },
+  { name: "Devengamientos", path: "/dashboard/liquidaciones", icon: FileCheck },
   { name: "Documentos", path: "/dashboard/documentos", icon: FolderOpen },
   { name: "Reportes", path: "/dashboard/reportes", icon: BarChart3 },
   { name: "Organigrama", path: "/dashboard/organigrama", icon: Network },
@@ -108,14 +108,20 @@ function DashboardLayoutContent({
       {/* Desktop & Tablet Sidebar */}
       <aside className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
-          <Image
-            src="/logo_ok.png"
-            alt="Logo Secretaría"
-            width={180}
-            height={40}
-            className={styles.logo}
-            priority
-          />
+          <div className={styles.logoContainer}>
+            <Image
+              src="/logo_ok.png"
+              alt="Logo Secretaría"
+              width={36}
+              height={36}
+              className={styles.logoImage}
+              priority
+            />
+            <div className={styles.logoTextGroup}>
+              <span className={styles.logoTitle}>SFVCyD</span>
+              <span className={styles.logoSubtitle}>Fortalecimiento Vecinal, Cultura y Deportes</span>
+            </div>
+          </div>
         </div>
 
         <nav className={styles.sidebarMenu}>

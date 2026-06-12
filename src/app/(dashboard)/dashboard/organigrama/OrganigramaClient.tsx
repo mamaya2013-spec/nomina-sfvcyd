@@ -442,13 +442,21 @@ export default function OrganigramaClient() {
                           <ArrowUpRight size={10} />
                         </Link>
                       </div>
-                      <span className={styles.agentBudget}>
-                        {Number(agent.importe_total || 0).toLocaleString("es-AR", {
-                          style: "currency",
-                          currency: "ARS",
-                          maximumFractionDigits: 0,
-                        })}
-                      </span>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+                        <span className={styles.agentBudget}>
+                          {Number(agent.importe_total || 0).toLocaleString("es-AR", {
+                            style: "currency",
+                            currency: "ARS",
+                            maximumFractionDigits: 0,
+                          })}
+                        </span>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>
+                          Base: ${Number(agent.type === "Becario" ? agent.importe_mensual_beca : agent.importe_mensual_monotributo || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                        </span>
+                        <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>
+                          Activa: ${Number(agent.importe_tarjeta_activa || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                        </span>
+                      </div>
                     </div>
                   ))
                 )}

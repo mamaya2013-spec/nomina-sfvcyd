@@ -32,7 +32,7 @@ import { toast, Toaster } from "sonner";
 interface ReportTemplate {
   id: number;
   name: string;
-  group: "Becarios" | "Monotributistas" | "Liquidaciones y Presupuesto" | "Estructura y Responsables";
+  group: "Becarios" | "Monotributistas" | "Devengamientos y Presupuesto" | "Estructura y Responsables";
   description: string;
 }
 
@@ -57,12 +57,12 @@ const REPORT_TEMPLATES: ReportTemplate[] = [
   { id: 15, name: "Monotributistas - Con Legajo Completo", group: "Monotributistas", description: "Monotributistas activos con las 7 documentaciones obligatorias aprobadas." },
   { id: 16, name: "Monotributistas - Con Legajo Pendiente/Incompleto", group: "Monotributistas", description: "Monotributistas activos con legajo incompleto o documentos pendientes." },
 
-  // Grupo 3: Liquidaciones y Presupuestos
-  { id: 17, name: "Consolidado de Liquidación por Secretaría", group: "Liquidaciones y Presupuesto", description: "Consolidado de importes liquidados por mes en toda la Secretaría." },
-  { id: 18, name: "Liquidación Detallada (Mes Seleccionado)", group: "Liquidaciones y Presupuesto", description: "Desglose de acreditaciones de nómina para un mes/año específico." },
-  { id: 19, name: "Ficha de Pagos Individual", group: "Liquidaciones y Presupuesto", description: "Historial completo de pagos y liquidaciones percibidos por un agente." },
-  { id: 20, name: "Ejecución de OCs y Desvíos", group: "Liquidaciones y Presupuesto", description: "Progreso de ejecución, remanente y desvíos de las 4 Órdenes de Compromiso." },
-  { id: 21, name: "Variación Salarial Semestral", group: "Liquidaciones y Presupuesto", description: "Análisis comparativo de haberes por categoría respecto al semestre anterior." },
+  // Grupo 3: Devengamientos y Presupuesto
+  { id: 17, name: "Consolidado de Devengamiento por Secretaría", group: "Devengamientos y Presupuesto", description: "Consolidado de importes devengados por mes en toda la Secretaría." },
+  { id: 18, name: "Devengamiento Detallado (Mes Seleccionado)", group: "Devengamientos y Presupuesto", description: "Desglose de acreditaciones de nómina para un mes/año específico." },
+  { id: 19, name: "Ficha de Pagos Individual", group: "Devengamientos y Presupuesto", description: "Historial completo de pagos y devengamientos percibidos por un agente." },
+  { id: 20, name: "Ejecución de OCs y Desvíos", group: "Devengamientos y Presupuesto", description: "Progreso de ejecución, remanente y desvíos de las 4 Órdenes de Compromiso." },
+  { id: 21, name: "Variación Salarial Semestral", group: "Devengamientos y Presupuesto", description: "Análisis comparativo de haberes por categoría respecto al semestre anterior." },
 
   // Grupo 4: Estructura Orgánica
   { id: 22, name: "Nómina de Responsables y Gasto Administrado", group: "Estructura y Responsables", description: "Listado de responsables con personal a cargo y totales de presupuesto mensual bajo su cargo." }
@@ -575,9 +575,9 @@ export default function ReportesPage() {
             filename = `Monotributistas_Legajo_Pendiente_${selectedSemester.nombre_display}.xlsx`;
             break;
 
-          // ==================== GRUPO 3: LIQUIDACIONES Y PRESUPUESTOS ====================
-          case 17: // Consolidado de Liquidación por Secretaría
-            headers = ["Mes", "Año", "Becarios", "Monotributistas", "Presupuesto Base", "Tarjeta Activa (10%)", "Total Acreditado"];
+          // ==================== GRUPO 3: DEVENGAMIENTOS Y PRESUPUESTOS ====================
+          case 17: // Consolidado de Devengamiento por Secretaría
+            headers = ["Mes", "Año", "Becarios", "Monotributistas", "Presupuesto Base", "Tarjeta Activa (10%)", "Total Devengado"];
             const monthlyMap: { [key: string]: { month: number; year: number; becarios: number; monos: number; base: number; activa: number; total: number } } = {};
             
             liquidaciones.forEach((l) => {
@@ -604,11 +604,11 @@ export default function ReportesPage() {
                 formatCurrency(g.activa),
                 formatCurrency(g.total),
               ]);
-            filename = `Consolidado_Liquidaciones_${selectedSemester.nombre_display}.xlsx`;
+            filename = `Consolidado_Devengamientos_${selectedSemester.nombre_display}.xlsx`;
             break;
 
-          case 18: // Liquidación Detallada (Mes/Año Seleccionado)
-            headers = ["Nombre", "CUIL/CUIT", "Concepto", "Subsecretaría", "Área", "Haber Base", "Tarjeta Activa", "Total Acreditado", "Estado"];
+          case 18: // Devengamiento Detallado (Mes/Año Seleccionado)
+            headers = ["Nombre", "CUIL/CUIT", "Concepto", "Subsecretaría", "Área", "Haber Base", "Tarjeta Activa", "Total Devengado", "Estado"];
             
             // Filters this from liquidaciones list
             let detailLiqs = liquidaciones.filter((l) => l.mes === selectedMonth && l.anio === selectedYear);
@@ -640,7 +640,7 @@ export default function ReportesPage() {
                 l.estado_liquidacion || "pendiente",
               ];
             });
-            filename = `Liquidacion_Detallada_${selectedMonth}_${selectedYear}.xlsx`;
+            filename = `Devengamiento_Detallado_${selectedMonth}_${selectedYear}.xlsx`;
             break;
 
           case 19: // Ficha de Pagos Individual
@@ -917,7 +917,7 @@ export default function ReportesPage() {
         doc.setFontSize(11);
         doc.setFont("helvetica", "normal");
         doc.text(`Resumen Ejecutivo Mensual de Nómina y Presupuesto`, 15, 27);
-        doc.text(`Período de Liquidación: ${monthLabel} ${execYear}`, 15, 32);
+        doc.text(`Período de Devengamiento: ${monthLabel} ${execYear}`, 15, 32);
         doc.line(15, 37, 195, 37);
 
         // 2. Metrics Compiling
@@ -944,14 +944,14 @@ export default function ReportesPage() {
         // 3. Body text
         doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
-        doc.text("1. Síntesis Financiera de Liquidación", 15, 47);
+        doc.text("1. Síntesis Financiera de Devengamiento", 15, 47);
         
         doc.setFont("helvetica", "normal");
         doc.setFontSize(10.5);
-        doc.text(`• Total Liquidado en el Período: ${formatCurrency(totalPaid)}`, 18, 54);
+        doc.text(`• Total Devengado en el Período: ${formatCurrency(totalPaid)}`, 18, 54);
         doc.text(`  - Concepto Becarios (Base + 10% Activa): ${formatCurrency(becsPaid)}`, 18, 60);
         doc.text(`  - Concepto Monotributistas (Base + 10% Activa): ${formatCurrency(monosPaid)}`, 18, 66);
-        doc.text(`• Agentes Liquidados: ${liqs.length} personas en nómina activa.`, 18, 72);
+        doc.text(`• Agentes Devengados: ${liqs.length} personas en nómina activa.`, 18, 72);
 
         doc.setFont("helvetica", "bold");
         doc.setFontSize(12);
@@ -1147,7 +1147,7 @@ export default function ReportesPage() {
           {(selectedTemplate === 18) && (
             <>
               <div className={styles.filterGroup}>
-                <label>Mes de Liquidación</label>
+                <label>Mes de Devengamiento</label>
                 <select
                   className={styles.selectInput}
                   value={selectedMonth}

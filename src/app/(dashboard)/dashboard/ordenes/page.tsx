@@ -43,11 +43,46 @@ type OcFormValues = z.infer<typeof ocFormSchema>;
 
 export default function OrdenesCompromisoPage() {
   const supabase = createClient();
-  const { selectedSemester } = useSemester();
+  const { semesters, selectedSemester, loading: semesterLoading } = useSemester();
+
+  // Local semester state for history selection
+  const [localSemesterId, setLocalSemesterId] = useState<string>("");
+
+  // Sync with global selection
+  useEffect(() => {
+    if (selectedSemester) {
+      setLocalSemesterId(selectedSemester.id);
+    }
+  }, [selectedSemester]);
+
+  // Compute current semester based on local selection
+  const currentSemester = useMemo(() => {
+    if (semesters.length === 0) return selectedSemester;
+    if (!localSemesterId) return selectedSemester || semesters[0] || null;
+    return semesters.find((s) => s.id === localSemesterId) || selectedSemester || semesters[0] || null;
+  }, [localSemesterId, semesters, selectedSemester]);
+
+  // Compute unique years from semesters
+  const years = useMemo(() => {
+    const uniqueYears = Array.from(new Set(semesters.map((s) => s.anio)));
+    return uniqueYears.sort((a, b) => b - a);
+  }, [semesters]);
+
+  // Selected year of currently active local semester
+  const selectedYear = currentSemester?.anio || new Date().getFullYear();
+
+  // Semesters available for the selected year
+  const availableSemestersForYear = useMemo(() => {
+    return semesters
+      .filter((s) => s.anio === selectedYear)
+      .sort((a, b) => b.numero_semestre - a.numero_semestre);
+  }, [semesters, selectedYear]);
 
   // Data States
   const [ocs, setOcs] = useState<any[]>([]);
+  const [projections, setProjections] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
+  const [activeView, setActiveView] = useState<"partidas" | "proyecciones">("partidas");
 
   // Drawer States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -72,15 +107,58 @@ export default function OrdenesCompromisoPage() {
     },
   });
 
+  // Consolidated Calculations
+  const consolidated = useMemo(() => {
+    let totalAsignado = 0;
+    let totalEjecutado = 0;
+    let totalCostoMensual = 0;
+    let totalProyectadoRestante = 0;
+    let mesesRestantes = 0;
+    let mesesRestantesList: number[] = [];
+
+    CONCEPTS.forEach((concept) => {
+      const oc = ocs.find((o) => o.tipo === concept.tipo);
+      const proj = projections[concept.tipo] || { costo_mensual: 0, meses_restantes: 0, meses_restantes_list: [] };
+
+      if (oc) {
+        totalAsignado += Number(oc.monto_asignado || 0);
+        totalEjecutado += Number(oc.monto_ejecutado || 0);
+      }
+
+      totalCostoMensual += Number(proj.costo_mensual || 0);
+      totalProyectadoRestante += Number(proj.costo_mensual || 0) * Number(proj.meses_restantes || 0);
+
+      if (proj.meses_restantes > mesesRestantes) {
+        mesesRestantes = proj.meses_restantes;
+        mesesRestantesList = proj.meses_restantes_list || [];
+      }
+    });
+
+    const totalProyectado = totalEjecutado + totalProyectadoRestante;
+    const balanceProyectado = totalAsignado - totalProyectado;
+
+    return {
+      totalAsignado,
+      totalEjecutado,
+      totalCostoMensual,
+      totalProyectadoRestante,
+      totalProyectado,
+      balanceProyectado,
+      mesesRestantes,
+      mesesRestantesList,
+    };
+  }, [ocs, projections]);
+
   const loadOcsData = async () => {
-    if (!selectedSemester) return;
+    if (!currentSemester) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/ordenes?semestre_id=${selectedSemester.id}`);
+      const res = await fetch(`/api/ordenes?semestre_id=${currentSemester.id}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al cargar órdenes de compromiso");
 
       setOcs(data.ordenes || []);
+      setProjections(data.proyecciones || {});
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -89,14 +167,14 @@ export default function OrdenesCompromisoPage() {
   };
 
   useEffect(() => {
-    if (selectedSemester) {
+    if (currentSemester) {
       loadOcsData();
     }
-  }, [selectedSemester]);
+  }, [currentSemester]);
 
   // Open Drawer to Create/Edit OC
   const handleOpenDrawer = (concept: any, existingOc: any = null) => {
-    if (selectedSemester?.bloqueado) return;
+    if (currentSemester?.bloqueado) return;
 
     setSelectedConcept(concept);
     setEditingOc(existingOc);
@@ -123,12 +201,12 @@ export default function OrdenesCompromisoPage() {
 
   // Submit Drawer Form
   const onSubmitOc = async (values: OcFormValues) => {
-    if (!selectedSemester) return;
+    if (!currentSemester) return;
     setSaving(true);
     try {
       const payload = {
         ...values,
-        semestre_id: selectedSemester.id,
+        semestre_id: currentSemester.id,
       };
 
       const res = await fetch("/api/ordenes", {
@@ -163,7 +241,7 @@ export default function OrdenesCompromisoPage() {
           </p>
         </div>
 
-        {selectedSemester?.bloqueado && (
+        {currentSemester?.bloqueado && (
           <div className={styles.lockAlert}>
             <Lock size={16} />
             <span>Semestre Cerrado (Solo Lectura)</span>
@@ -171,12 +249,83 @@ export default function OrdenesCompromisoPage() {
         )}
       </div>
 
+      {/* Selector de Período Local */}
+      {!semesterLoading && semesters.length > 0 && (
+        <div className={styles.filtersWrapper}>
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>Año Fiscal</span>
+            <div className={styles.selectWrapper}>
+              <Calendar size={14} className={styles.selectIcon} />
+              <select
+                value={selectedYear}
+                onChange={(e) => {
+                  const year = Number(e.target.value);
+                  const sems = semesters.filter((s) => s.anio === year);
+                  if (sems.length > 0) {
+                    const active = sems.find((s) => s.activo);
+                    setLocalSemesterId(active ? active.id : sems[0].id);
+                  }
+                }}
+                className={styles.filterSelect}
+              >
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className={styles.filterGroup}>
+            <span className={styles.filterLabel}>Período Semestral</span>
+            <div className={styles.periodTabs}>
+              {availableSemestersForYear.map((sem) => (
+                <button
+                  key={sem.id}
+                  onClick={() => setLocalSemesterId(sem.id)}
+                  className={`${styles.periodTab} ${
+                    localSemesterId === sem.id ? styles.periodTabActive : ""
+                  }`}
+                >
+                  <span>{sem.numero_semestre}º Semestre ({sem.numero_semestre === 1 ? "1S" : "2S"})</span>
+                  {sem.bloqueado ? (
+                    <Lock size={12} style={{ opacity: 0.6, marginLeft: "4px" }} />
+                  ) : (
+                    <span className={styles.activeIndicator} />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Selector Tabs */}
+      <div className={styles.tabsContainer}>
+        <button
+          onClick={() => setActiveView("partidas")}
+          className={`${styles.tabLink} ${activeView === "partidas" ? styles.tabLinkActive : ""}`}
+        >
+          <Settings size={16} />
+          <span>Partidas Presupuestarias (OC)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveView("proyecciones")}
+          className={`${styles.tabLink} ${activeView === "proyecciones" ? styles.tabLinkActive : ""}`}
+        >
+          <TrendingUp size={16} />
+          <span>Consola de Proyecciones</span>
+        </button>
+      </div>
+
       {loading ? (
         <div className={styles.loadingSpinner}>
           <Loader2 className={styles.spin} size={48} />
           <p>Sincronizando ejecución presupuestaria...</p>
         </div>
-      ) : (
+      ) : activeView === "partidas" ? (
         <div className={styles.grid}>
           {CONCEPTS.map((concept) => {
             const oc = ocs.find((o) => o.tipo === concept.tipo);
@@ -195,7 +344,7 @@ export default function OrdenesCompromisoPage() {
                   </div>
                   <p>Sin Orden de Compromiso presupuestaria registrada para este semestre.</p>
                   
-                  {!selectedSemester?.bloqueado && (
+                  {!currentSemester?.bloqueado && (
                     <button
                       onClick={() => handleOpenDrawer(concept)}
                       className={styles.createBtn}
@@ -226,6 +375,24 @@ export default function OrdenesCompromisoPage() {
               alertLevel = "warning";
             }
 
+            // Projection Calculations
+            const proj = projections[concept.tipo] || { costo_mensual: 0, meses_restantes: 0, meses_restantes_list: [] };
+            const costoMensual = proj.costo_mensual;
+            const mesesRestantes = proj.meses_restantes;
+            const mesesRestantesList = proj.meses_restantes_list || [];
+            const montoProyectadoRestante = costoMensual * mesesRestantes;
+            const totalProyectado = ejecutado + montoProyectadoRestante;
+            const balanceProyectado = asignado - totalProyectado;
+
+            const getMonthName = (mNum: number) => {
+              const months = [
+                "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+                "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"
+              ];
+              return months[mNum - 1] || "";
+            };
+            const labelMeses = mesesRestantesList.map(getMonthName).join(", ");
+
             return (
               <div key={concept.tipo} className={styles.card}>
                 <div className={styles.cardHeader}>
@@ -239,26 +406,26 @@ export default function OrdenesCompromisoPage() {
                 </div>
 
                 <div className={styles.amountsList}>
-                  <div className={styles.amountItem}>
-                    <span className={styles.amountLabel}>Asignado</span>
-                    <span className={styles.amountVal}>
-                      ${asignado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  <div className={styles.amountItem}>
-                    <span className={styles.amountLabel}>Ejecutado</span>
-                    <span className={styles.amountVal}>
-                      ${ejecutado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  <div className={`${styles.amountItem} ${styles.totalRow}`}>
-                    <span className={styles.amountLabel}>Remanente Disponible</span>
-                    <span className={styles.amountVal} style={{ color: remanente >= 0 ? "#10b981" : "#f43f5e" }}>
-                      ${remanente.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
+                   <div className={styles.amountItem}>
+                     <span className={styles.amountLabel}>Asignado</span>
+                     <span className={styles.amountVal}>
+                       ${asignado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                     </span>
+                   </div>
+ 
+                   <div className={styles.amountItem}>
+                     <span className={styles.amountLabel}>Ejecutado (Real)</span>
+                     <span className={styles.amountVal}>
+                       ${ejecutado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                     </span>
+                   </div>
+ 
+                   <div className={`${styles.amountItem} ${styles.totalRow}`}>
+                     <span className={styles.amountLabel}>Remanente Disponible</span>
+                     <span className={styles.amountVal} style={{ color: remanente >= 0 ? "#10b981" : "#f43f5e" }}>
+                       ${remanente.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                     </span>
+                   </div>
                 </div>
 
                 {/* Progress bar */}
@@ -298,7 +465,70 @@ export default function OrdenesCompromisoPage() {
                   </p>
                 )}
 
-                {!selectedSemester?.bloqueado && (
+                {/* Sección de Proyecciones Presupuestarias */}
+                <div className={styles.projectionSection}>
+                  <h4>
+                    <TrendingUp size={16} />
+                    <span>Proyección de Nómina Activa</span>
+                  </h4>
+
+                  <div className={styles.amountsList} style={{ gap: "8px" }}>
+                    <div className={styles.amountItem} style={{ fontSize: "12.5px" }}>
+                      <span className={styles.amountLabel}>Costo Nómina (Mensual)</span>
+                      <span className={styles.amountVal}>
+                        ${costoMensual.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    <div className={styles.amountItem} style={{ fontSize: "12.5px" }}>
+                      <span className={styles.amountLabel}>
+                        Meses Restantes {labelMeses ? `(${labelMeses})` : ""}
+                      </span>
+                      <span className={styles.amountVal} style={{ fontFamily: "monospace" }}>
+                        {mesesRestantes}
+                      </span>
+                    </div>
+
+                    <div className={styles.amountItem} style={{ fontSize: "12.5px" }}>
+                      <span className={styles.amountLabel}>Monto Proyectado Restante</span>
+                      <span className={styles.amountVal}>
+                        ${montoProyectadoRestante.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    <div className={`${styles.amountItem} ${styles.totalRow}`} style={{ fontSize: "13px", marginTop: "4px" }}>
+                      <span className={styles.amountLabel}>Total (Real + Proyectado)</span>
+                      <span className={styles.amountVal} style={{ color: "var(--accent-blue)" }}>
+                        ${totalProyectado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    <div className={styles.amountItem} style={{ fontSize: "13.0px", fontWeight: "600", marginTop: "4px" }}>
+                      <span className={styles.amountLabel}>Resultado Final Proyectado</span>
+                      <span className={styles.amountVal} style={{ color: balanceProyectado >= 0 ? "#10b981" : "#f43f5e" }}>
+                        {balanceProyectado >= 0 ? "Superávit: " : "Déficit: "}
+                        ${Math.abs(balanceProyectado).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Alertas de Proyección */}
+                  {balanceProyectado < 0 && (
+                    <div className={`${styles.alertBox} ${styles.alertBox_critical}`} style={{ marginTop: "12px", background: "rgba(244, 63, 94, 0.08)", borderColor: "rgba(244, 63, 94, 0.2)", color: "#fda4af" }}>
+                      <AlertCircle size={16} />
+                      <span><strong>¡Falta Dinero!</strong> El remanente no cubrirá la nómina proyectada por ${Math.abs(balanceProyectado).toLocaleString("es-AR", { minimumFractionDigits: 2 })}.</span>
+                    </div>
+                  )}
+
+                  {balanceProyectado >= 0 && mesesRestantes > 0 && (
+                    <div className={styles.alertBox_success}>
+                      <FileCheck size={16} />
+                      <span>Fondos suficientes para completar el semestre.</span>
+                    </div>
+                  )}
+                </div>
+
+                {!currentSemester?.bloqueado && (
                   <div className={styles.cardActions}>
                     <button
                       onClick={() => handleOpenDrawer(concept, oc)}
@@ -311,6 +541,177 @@ export default function OrdenesCompromisoPage() {
               </div>
             );
           })}
+        </div>
+      ) : (
+        // PROJECTIONS CONSOLE VIEW
+        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          {/* Consolidated Warning Banner */}
+          {consolidated.balanceProyectado < 0 && (
+            <div className={`${styles.alertBox} ${styles.alertBox_critical}`} style={{ padding: "16px", background: "rgba(244, 63, 94, 0.08)", borderColor: "rgba(244, 63, 94, 0.2)", color: "#fda4af", flexDirection: "column", alignItems: "flex-start", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "700", fontSize: "14px" }}>
+                <AlertCircle size={20} style={{ color: "var(--accent-rose)" }} />
+                <span>ALERTA PRESUPUESTARIA GLOBAL</span>
+              </div>
+              <p style={{ fontSize: "13px", lineHeight: "1.5" }}>
+                La proyección financiera indica que <strong>el presupuesto semestral consolidado no será suficiente</strong> para cubrir la nómina activa actual durante los meses restantes del semestre. Se estima un déficit global de <strong>${Math.abs(consolidated.balanceProyectado).toLocaleString("es-AR", { minimumFractionDigits: 2 })}</strong>. Se recomienda reasignar partidas presupuestarias o gestionar una ampliación de las Órdenes de Compromiso.
+              </p>
+            </div>
+          )}
+
+          {/* Consolidated KPIs */}
+          <div className={styles.consolidatedGrid}>
+            <div className={styles.kpiCardGlobal}>
+              <span className={styles.kpiLabel}>Presupuesto Semestral Total</span>
+              <span className={styles.kpiValue}>
+                ${consolidated.totalAsignado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+              </span>
+              <span className={styles.kpiSubtext}>Asignación sumada de las 4 OCs</span>
+            </div>
+
+            <div className={styles.kpiCardGlobal}>
+              <span className={styles.kpiLabel}>Ejecutado Real (Acumulado)</span>
+              <span className={styles.kpiValue} style={{ color: "var(--accent-blue)" }}>
+                ${consolidated.totalEjecutado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+              </span>
+              <span className={styles.kpiSubtext}>
+                {consolidated.totalAsignado > 0
+                  ? `${((consolidated.totalEjecutado / consolidated.totalAsignado) * 100).toFixed(1)}% ejecutado`
+                  : "0% ejecutado"}
+              </span>
+            </div>
+
+            <div className={styles.kpiCardGlobal}>
+              <span className={styles.kpiLabel}>Costo Nómina Activa (Mensual)</span>
+              <span className={styles.kpiValue}>
+                ${consolidated.totalCostoMensual.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+              </span>
+              <span className={styles.kpiSubtext}>Becarios y monotributistas activos</span>
+            </div>
+
+            <div className={`${styles.kpiCardGlobal} ${consolidated.balanceProyectado >= 0 ? styles.kpiBorderGreen : styles.kpiBorderRed}`}>
+              <span className={styles.kpiLabel}>Resultado Semestral Proyectado</span>
+              <span className={styles.kpiValue} style={{ color: consolidated.balanceProyectado >= 0 ? "#10b981" : "#f43f5e" }}>
+                ${consolidated.balanceProyectado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+              </span>
+              <span className={styles.kpiSubtext} style={{ color: consolidated.balanceProyectado >= 0 ? "#a7f3d0" : "#fda4af", fontWeight: "600" }}>
+                {consolidated.balanceProyectado >= 0 ? "Superávit Proyectado" : "Déficit Proyectado"}
+              </span>
+            </div>
+          </div>
+
+          {/* Breakdown Table */}
+          <div className={styles.comparisonTableWrapper}>
+            <h3>Desglose Comparativo de Partidas</h3>
+            <div className={styles.tableResponsive}>
+              <table className={styles.comparisonTable}>
+                <thead>
+                  <tr>
+                    <th>Concepto</th>
+                    <th>N° OC</th>
+                    <th>Presupuesto Asignado</th>
+                    <th>Ejecutado Real</th>
+                    <th>Proyectado Restante</th>
+                    <th>Total Proyectado</th>
+                    <th>Resultado Proyectado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {CONCEPTS.map((concept) => {
+                    const oc = ocs.find((o) => o.tipo === concept.tipo);
+                    const proj = projections[concept.tipo] || { costo_mensual: 0, meses_restantes: 0 };
+                    const costoMensual = proj.costo_mensual;
+                    const mesesRestantes = proj.meses_restantes;
+                    const montoProyectadoRestante = costoMensual * mesesRestantes;
+
+                    if (!oc) {
+                      return (
+                        <tr key={concept.tipo}>
+                          <td style={{ fontWeight: 600 }}>{concept.label}</td>
+                          <td colSpan={6} style={{ color: "var(--text-muted)", textAlign: "center", padding: "14px" }}>
+                            Sin Orden de Compromiso asignada para este semestre.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const asignado = Number(oc.monto_asignado);
+                    const ejecutado = Number(oc.monto_ejecutado);
+                    const totalProyectado = ejecutado + montoProyectadoRestante;
+                    const balanceProyectado = asignado - totalProyectado;
+
+                    return (
+                      <tr key={concept.tipo}>
+                        <td style={{ fontWeight: 600 }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <span>{concept.label}</span>
+                            <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>{concept.badge}</span>
+                          </div>
+                        </td>
+                        <td style={{ fontFamily: "monospace" }}>{oc.numero_oc}</td>
+                        <td style={{ fontFamily: "monospace", fontWeight: 600 }}>
+                          ${asignado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ fontFamily: "monospace", color: "var(--accent-blue)" }}>
+                          ${ejecutado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ fontFamily: "monospace", color: "var(--text-secondary)" }}>
+                          ${montoProyectadoRestante.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ fontFamily: "monospace", fontWeight: 600, color: "var(--text-primary)" }}>
+                          ${totalProyectado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ fontFamily: "monospace", fontWeight: 700, color: balanceProyectado >= 0 ? "#10b981" : "#f43f5e" }}>
+                          ${balanceProyectado >= 0 ? "+" : ""}
+                          {balanceProyectado.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Monthly Cronograma */}
+          {consolidated.mesesRestantes > 0 && (
+            <div className={styles.timelineWrapper}>
+              <h3>Cronograma de Egresos Estimados (Mes a Mes)</h3>
+              <p className="text-secondary" style={{ fontSize: "13.5px", marginBottom: "16px" }}>
+                Meses pendientes de liquidación y sus erogaciones proyectadas según la nómina activa actual:
+              </p>
+              <div className={styles.timelineGrid}>
+                {consolidated.mesesRestantesList.map((mNum) => {
+                  const getFullMonthName = (m: number) => {
+                    const months = [
+                      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+                    ];
+                    return months[m - 1] || "";
+                  };
+
+                  return (
+                    <div key={mNum} className={styles.timelineCard}>
+                      <div className={styles.timelineHeader}>
+                        <Calendar size={18} style={{ color: "#06b6d4" }} />
+                        <span className={styles.timelineMonth}>{getFullMonthName(mNum)}</span>
+                      </div>
+                      <div className={styles.timelineBody}>
+                        <div className={styles.timelineDetailRow}>
+                          <span className={styles.timelineLabel}>Egresos Estimados</span>
+                          <span className={styles.timelineValue}>
+                            ${consolidated.totalCostoMensual.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "8px" }}>
+                          Basado en el costo run-rate mensual actual de la nómina de becarios y monotributistas.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
