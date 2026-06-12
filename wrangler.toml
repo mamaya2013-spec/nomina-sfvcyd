@@ -1,6 +1,6 @@
 name = "nomina-sfvcyd"
 main = ".open-next/worker.js"
-compatibility_date = "2024-11-01"
+compatibility_date = "2025-05-05"
 compatibility_flags = ["nodejs_compat"]
 
 # Static assets will be served automatically
