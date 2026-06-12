@@ -1,6 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const supabaseUrl = "https://ntglefztorxxdixpmnaj.supabase.co";
+const supabaseAnonKey = "sb_publishable_U7Rhm1kbdSWIvAOMeZeJeA_UDSuVsyl";
+
 export const updateSession = async (request: NextRequest) => {
   let response = NextResponse.next({
     request: {
@@ -9,8 +12,8 @@ export const updateSession = async (request: NextRequest) => {
   });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ntglefztorxxdixpmnaj.supabase.co",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "sb_publishable_U7Rhm1kbdSWIvAOMeZeJeA_UDSuVsyl",
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
