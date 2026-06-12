@@ -45,3 +45,7 @@ public/swe-worker*
 
 # OpenNext
 .open-next/
+
+# Wrangler
+.wrangler/
+
