@@ -9,8 +9,8 @@ export const updateSession = async (request: NextRequest) => {
   });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ntglefztorxxdixpmnaj.supabase.co",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "sb_publishable_U7Rhm1kbdSWIvAOMeZeJeA_UDSuVsyl",
     {
       cookies: {
         getAll() {

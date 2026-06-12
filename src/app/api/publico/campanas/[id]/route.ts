@@ -160,14 +160,16 @@ export async function POST(
           upsert: true,
         });
 
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ntglefztorxxdixpmnaj.supabase.co";
       if (uploadErr) {
-        urlSupabase = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/documentos/${filePath}`;
+        urlSupabase = `${supabaseUrl}/storage/v1/object/public/documentos/${filePath}`;
       } else {
         const { data: urlData } = supabase.storage.from("documentos").getPublicUrl(filePath);
         urlSupabase = urlData?.publicUrl || "";
       }
     } catch (storageErr: any) {
-      urlSupabase = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/documentos/${filePath}`;
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ntglefztorxxdixpmnaj.supabase.co";
+      urlSupabase = `${supabaseUrl}/storage/v1/object/public/documentos/${filePath}`;
     }
 
     // 2. Upload to Google Drive

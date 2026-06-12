@@ -42,16 +42,18 @@ export async function POST(req: NextRequest) {
           upsert: true,
         });
 
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ntglefztorxxdixpmnaj.supabase.co";
       if (uploadErr) {
         console.warn("Supabase Storage bucket upload warning (using public URL fallback):", uploadErr.message);
-        urlSupabase = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/documentos/${filePath}`;
+        urlSupabase = `${supabaseUrl}/storage/v1/object/public/documentos/${filePath}`;
       } else {
         const { data: urlData } = supabase.storage.from("documentos").getPublicUrl(filePath);
         urlSupabase = urlData?.publicUrl || "";
       }
     } catch (storageErr: any) {
       console.warn("Storage exception caught (using public URL fallback):", storageErr.message);
-      urlSupabase = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/documentos/${filePath}`;
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ntglefztorxxdixpmnaj.supabase.co";
+      urlSupabase = `${supabaseUrl}/storage/v1/object/public/documentos/${filePath}`;
     }
 
     // 2. Upload to Google Drive as dual primary storage
