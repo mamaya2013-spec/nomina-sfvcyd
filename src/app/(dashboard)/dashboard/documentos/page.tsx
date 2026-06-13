@@ -1670,8 +1670,12 @@ export default function DocumentosDashboardPage() {
                           <span className={styles.statLabel}>Completos</span>
                         </div>
                         <div>
-                          <span className={styles.statVal} style={{ color: "#f59e0b" }}>{camp.stats.pending}</span>
-                          <span className={styles.statLabel}>Pendientes</span>
+                          <span className={styles.statVal} style={{ color: "#f59e0b" }}>{camp.stats.incomplete || 0}</span>
+                          <span className={styles.statLabel}>Incompletos</span>
+                        </div>
+                        <div>
+                          <span className={styles.statVal} style={{ color: "#ef4444" }}>{camp.stats.sinEntrega || 0}</span>
+                          <span className={styles.statLabel}>Sin Presentar</span>
                         </div>
                       </div>
 

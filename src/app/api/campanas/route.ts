@@ -19,21 +19,37 @@ export async function GET(req: NextRequest) {
       (campaigns || []).map(async (camp) => {
         const { data: deliveries } = await supabase
           .from("campana_entregas")
-          .select("estado_entrega")
+          .select("persona_id, estado_entrega")
+          .eq("campana_id", camp.id);
+
+        const { data: docs } = await supabase
+          .from("documentos")
+          .select("persona_id")
           .eq("campana_id", camp.id);
 
         const total = deliveries?.length || 0;
         const approved = deliveries?.filter((d) => d.estado_entrega === "entregado").length || 0;
-        const pending = deliveries?.filter((d) => d.estado_entrega === "pendiente").length || 0;
-        const rejected = deliveries?.filter((d) => d.estado_entrega === "rechazado").length || 0;
+
+        // Set of people who uploaded at least one document for this campaign
+        const uploadedPersonas = new Set(docs?.map((d) => d.persona_id) || []);
+        const approvedPersonIds = new Set(deliveries?.filter((d) => d.estado_entrega === "entregado").map(d => d.persona_id) || []);
+
+        let incomplete = 0;
+        uploadedPersonas.forEach(pId => {
+          if (!approvedPersonIds.has(pId)) {
+            incomplete++;
+          }
+        });
+
+        const sinEntrega = Math.max(0, total - approved - incomplete);
 
         return {
           ...camp,
           stats: {
             total,
             approved,
-            pending,
-            rejected,
+            incomplete,
+            sinEntrega,
             progress: total > 0 ? (approved / total) * 100 : 0,
           },
         };
