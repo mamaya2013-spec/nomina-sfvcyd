@@ -1,14 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Accessing searchParams forces dynamic execution
+  const { searchParams } = new URL(req.url);
+  const t = searchParams.get("t") || "none";
+
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
   const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
   return NextResponse.json({
+    diagnosedAt: new Date().toISOString(),
+    cacheBustParam: t,
     GOOGLE_CLIENT_ID: clientId ? `Present (length: ${clientId.length})` : "Missing",
     GOOGLE_CLIENT_SECRET: clientSecret ? `Present (length: ${clientSecret.length})` : "Missing",
     GOOGLE_REFRESH_TOKEN: refreshToken ? `Present (length: ${refreshToken.length})` : "Missing",
