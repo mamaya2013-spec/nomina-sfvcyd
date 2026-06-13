@@ -258,7 +258,7 @@ export default function MonotributistaDetailClient({ id }: DetailProps) {
         uploaded: !!doc,
         status: doc ? doc.estado_revision : "pendiente",
         fileName: doc ? doc.nombre_archivo : null,
-        url: doc ? (doc.url_supabase || doc.url_google_drive) : null,
+        url: doc ? (doc.url_google_drive || doc.url_supabase) : null,
         updatedAt: doc ? doc.created_at : null,
         esTurno: doc ? doc.es_turno : false,
         fechaTurno: doc ? doc.fecha_turno : null,

@@ -1153,9 +1153,9 @@ export default function DocumentosDashboardPage() {
                       </div>
 
                       <div className={styles.docActions}>
-                        {doc.url_supabase && (
+                        {(doc.url_google_drive || doc.url_supabase) && (
                           <a
-                            href={doc.url_supabase}
+                            href={doc.url_google_drive || doc.url_supabase}
                             target="_blank"
                             rel="noreferrer"
                             className={styles.viewLink}
