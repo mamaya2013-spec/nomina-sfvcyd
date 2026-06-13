@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToGoogleDrive } from "@/lib/google-drive";
 
+export const dynamic = "force-dynamic";
+
 // Helper to calculate total days in a month
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month, 0).getDate();

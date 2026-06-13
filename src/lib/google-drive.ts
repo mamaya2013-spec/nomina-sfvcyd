@@ -1,118 +1,39 @@
 interface GoogleDriveConfig {
-  clientEmail: string;
-  privateKey: string;
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
   folderId: string;
 }
 
 function getGoogleConfig(): GoogleDriveConfig | null {
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
   const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-  if (!clientEmail || !privateKey || !folderId) {
+  if (!clientId || !clientSecret || !refreshToken || !folderId) {
     return null;
   }
 
-  // Handle double quotes and escaped newlines in env vars
-  const cleanKey = privateKey
-    .replace(/^"/, "")
-    .replace(/"$/, "")
-    .replace(/\\n/g, "\n");
-
   return {
-    clientEmail,
-    privateKey: cleanKey,
+    clientId,
+    clientSecret,
+    refreshToken,
     folderId,
   };
 }
 
-/**
- * Base64url encode a string or ArrayBuffer (Edge Runtime compatible)
- */
-function base64urlEncode(input: string | ArrayBuffer): string {
-  let bytes: Uint8Array;
-  if (typeof input === "string") {
-    bytes = new TextEncoder().encode(input);
-  } else {
-    bytes = new Uint8Array(input);
-  }
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-/**
- * Convert a PEM private key to a CryptoKey for signing (Web Crypto API)
- */
-async function importPrivateKey(pem: string): Promise<CryptoKey> {
-  // Strip PEM header/footer and whitespace
-  const pemBody = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, "")
-    .replace(/-----END PRIVATE KEY-----/, "")
-    .replace(/\s/g, "");
-
-  // Decode base64 to ArrayBuffer
-  const binaryString = atob(pemBody);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  return crypto.subtle.importKey(
-    "pkcs8",
-    bytes.buffer,
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      hash: "SHA-256",
-    },
-    false,
-    ["sign"]
-  );
-}
-
 async function getAccessToken(config: GoogleDriveConfig): Promise<string> {
-  const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + 3600;
-
-  const claim = {
-    iss: config.clientEmail,
-    scope: "https://www.googleapis.com/auth/drive.file",
-    aud: "https://oauth2.googleapis.com/token",
-    exp,
-    iat,
-  };
-
-  const header = {
-    alg: "RS256",
-    typ: "JWT",
-  };
-
-  const encodedHeader = base64urlEncode(JSON.stringify(header));
-  const encodedClaim = base64urlEncode(JSON.stringify(claim));
-
-  const signingInput = `${encodedHeader}.${encodedClaim}`;
-
-  // Sign with Web Crypto API (Edge Runtime compatible)
-  const privateKey = await importPrivateKey(config.privateKey);
-  const signatureBuffer = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    privateKey,
-    new TextEncoder().encode(signingInput)
-  );
-
-  const signature = base64urlEncode(signatureBuffer);
-  const jwt = `${encodedHeader}.${encodedClaim}.${signature}`;
-
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: jwt,
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      refresh_token: config.refreshToken,
+      grant_type: "refresh_token",
     }).toString(),
   });
 
@@ -138,9 +59,9 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
- * Uploads a file buffer to the configured Google Drive folder.
+ * Uploads a file buffer to the configured Google Drive folder using OAuth2.
  * Returns the Google Drive web view URL for the uploaded file.
- * Compatible with Edge Runtime (uses Web Crypto API instead of Node.js crypto).
+ * Compatible with Edge Runtime.
  */
 export async function uploadToGoogleDrive(
   fileName: string,

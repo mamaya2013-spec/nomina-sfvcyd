@@ -86,7 +86,9 @@ export default function PublicCampaignPortalPage({
     setLoading(true);
     setDniError(null);
     try {
-      const res = await fetch(`/api/publico/campanas/${id}?dni=${dniValue.trim()}`);
+      const res = await fetch(`/api/publico/campanas/${id}?dni=${dniValue.trim()}`, {
+        cache: "no-store",
+      });
       const data = await res.json();
 
       if (!res.ok) {
