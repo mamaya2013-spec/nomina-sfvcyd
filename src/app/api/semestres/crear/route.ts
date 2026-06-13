@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
       fecha_fin,
       categorias_becas,
       categorias_monotributistas,
+      porcentaje_activa,
     } = body;
 
     // Validate request
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
           semestre_id: newSemesterId,
           numero_categoria: cat.numero_categoria,
           monto: cat.monto,
-          porcentaje_activa: 10.00,
+          porcentaje_activa: Number(porcentaje_activa ?? 10.00),
         })
         .select()
         .single();
@@ -147,7 +148,7 @@ export async function POST(req: NextRequest) {
           letra: cat.letra,
           descripcion_categoria: cat.descripcion_categoria || null,
           monto: cat.monto,
-          porcentaje_activa: 10.00,
+          porcentaje_activa: Number(porcentaje_activa ?? 10.00),
         })
         .select()
         .single();

@@ -189,7 +189,7 @@ export default function MonotributistaDetailClient({ id }: DetailProps) {
             subsecretarias(id, nombre),
             areas(id, nombre),
             responsables(id, nombre_completo, telefono, email, cargo),
-            categorias_monotributistas(id, letra, monto, total)
+            categorias_monotributistas(id, letra, monto, total, porcentaje_activa)
           `)
           .eq("id", id)
           .single();
@@ -368,7 +368,7 @@ export default function MonotributistaDetailClient({ id }: DetailProps) {
             <div className={styles.infoRow}>
               <CreditCard size={16} />
               <div>
-                <span className={styles.infoLabel}>Tarjeta Activa (10%)</span>
+                <span className={styles.infoLabel}>Tarjeta Activa ({person.categorias_monotributistas?.porcentaje_activa ?? 10}%)</span>
                 <span className={`${styles.infoVal} mono`}>
                   + ${Number(person.importe_tarjeta_activa).toLocaleString("es-AR")}
                 </span>

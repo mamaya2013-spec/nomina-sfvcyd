@@ -99,24 +99,30 @@ export async function POST(request: Request) {
     const { data: existingSubs } = await supabase
       .from("subsecretarias")
       .select("id, nombre");
-    const subMap = new Map<string, string>(); // name.toLowerCase() -> ID
-    existingSubs?.forEach((s) => subMap.set(s.nombre.toLowerCase().trim(), s.id));
+    const subMap = new Map<string, string>(); // normalized name -> ID
+    existingSubs?.forEach((s) => subMap.set(normalizeString(s.nombre), s.id));
 
     const { data: existingAreas } = await supabase
       .from("areas")
       .select("id, nombre, subsecretaria_id");
-    const areaMap = new Map<string, string>(); // "subid:areaname" -> ID
+    const areaMap = new Map<string, string>(); // "subid:normalized_areaname" -> ID
     existingAreas?.forEach((a) =>
-      areaMap.set(`${a.subsecretaria_id}:${a.nombre.toLowerCase().trim()}`, a.id)
+      areaMap.set(`${a.subsecretaria_id}:${normalizeString(a.nombre)}`, a.id)
     );
 
     const { data: existingResps } = await supabase
       .from("responsables")
       .select("id, nombre_completo, area_id");
-    const respMap = new Map<string, string>(); // "areaid:respname" -> ID
+    const respMap = new Map<string, string>(); // "areaid:normalized_respname" -> ID
     existingResps?.forEach((r) =>
-      respMap.set(`${r.area_id || "null"}:${r.nombre_completo.toLowerCase().trim()}`, r.id)
+      respMap.set(`${r.area_id || "null"}:${normalizeString(r.nombre_completo)}`, r.id)
     );
+
+    const { data: activeRespsData } = await supabase
+      .from("responsables")
+      .select("id, subsecretaria_id, area_id, nombre_completo")
+      .eq("activo", true);
+    const activeResps = activeRespsData || [];
 
     let successfulInserts = 0;
     let failedInserts = 0;
@@ -135,7 +141,7 @@ export async function POST(request: Request) {
 
         // Resolve Subsecretaria
         let subId: string;
-        const cachedSubId = subMap.get(subName.toLowerCase());
+        const cachedSubId = subMap.get(normalizeString(subName));
         if (!cachedSubId) {
           const { data: newSub, error: subErr } = await supabase
             .from("subsecretarias")
@@ -147,13 +153,13 @@ export async function POST(request: Request) {
             throw new Error(`Error al crear subsecretaría: ${subErr?.message}`);
           }
           subId = newSub.id as string;
-          subMap.set(subName.toLowerCase(), subId);
+          subMap.set(normalizeString(subName), subId);
         } else {
           subId = cachedSubId;
         }
 
         // Resolve Area
-        const areaKey = `${subId}:${areaName.toLowerCase()}`;
+        const areaKey = `${subId}:${normalizeString(areaName)}`;
         let areaId: string;
         const cachedAreaId = areaMap.get(areaKey);
         if (!cachedAreaId) {
@@ -172,40 +178,70 @@ export async function POST(request: Request) {
           areaId = cachedAreaId;
         }
 
-        // Resolve Responsable
-        const respKey = `${areaId}:${respName.toLowerCase()}`;
-        let respId: string | null = respMap.get(respKey) || null;
-        if (!respId && respName !== "Sin Asignar" && respName !== "") {
-          // Check if exists in general first (without area restriction to avoid duplicate DNI trigger on insert)
-          const { data: checkResp } = await supabase
-            .from("responsables")
-            .select("id")
-            .eq("nombre_completo", respName)
-            .limit(1);
-
-          if (checkResp && checkResp.length > 0) {
-            respId = checkResp[0].id as string;
+        // Resolve Responsable automatically first from configuration
+        let respId: string | null = null;
+        if (activeResps.length > 0) {
+          // 1. Try area-specific first
+          const matchingAreaResp = activeResps.find(
+            (r) => r.subsecretaria_id === subId && r.area_id === areaId
+          );
+          if (matchingAreaResp) {
+            respId = matchingAreaResp.id;
           } else {
-            // We generate a placeholder DNI based on name hash/random to avoid duplicates trigger
-            const generatedDni = `IMP-${cleanDni(row.dni)}-${idx}`;
-            const { data: newResp, error: respErr } = await supabase
-              .from("responsables")
-              .insert({
-                nombre_completo: respName,
-                dni: generatedDni,
-                area_id: areaId,
-                subsecretaria_id: subId,
-                cargo: "Responsable (importación)",
-                activo: true,
-              })
-              .select("id")
-              .single();
-
-            if (respErr || !newResp) {
-              throw new Error(`Error al crear responsable: ${respErr?.message}`);
+            // 2. Try subsecretaria-wide (area_id is null)
+            const matchingSubResp = activeResps.find(
+              (r) => r.subsecretaria_id === subId && !r.area_id
+            );
+            if (matchingSubResp) {
+              respId = matchingSubResp.id;
             }
-            respId = newResp.id as string;
-            respMap.set(respKey, respId);
+          }
+        }
+
+        // If no active responsable is found in configuration, fall back to Excel row's "responsable"
+        if (!respId) {
+          const respKey = `${areaId}:${normalizeString(respName)}`;
+          respId = respMap.get(respKey) || null;
+          if (!respId && respName !== "Sin Asignar" && respName !== "") {
+            // Check if exists in general first (without area restriction to avoid duplicate DNI trigger on insert)
+            const { data: checkResp } = await supabase
+              .from("responsables")
+              .select("id")
+              .eq("nombre_completo", respName)
+              .limit(1);
+
+            if (checkResp && checkResp.length > 0) {
+              respId = checkResp[0].id as string;
+            } else {
+              // We generate a placeholder DNI based on name hash/random to avoid duplicates trigger
+              const generatedDni = `IMP-${cleanDni(row.dni)}-${idx}`;
+              const { data: newResp, error: respErr } = await supabase
+                .from("responsables")
+                .insert({
+                  nombre_completo: respName,
+                  dni: generatedDni,
+                  area_id: areaId,
+                  subsecretaria_id: subId,
+                  cargo: "Responsable (importación)",
+                  activo: true,
+                })
+                .select("id")
+                .single();
+
+              if (respErr || !newResp) {
+                throw new Error(`Error al crear responsable: ${respErr?.message}`);
+              }
+              respId = newResp.id as string;
+              respMap.set(respKey, respId);
+
+              // Also add to activeResps in case subsequent rows map to it
+              activeResps.push({
+                id: respId,
+                subsecretaria_id: subId,
+                area_id: areaId,
+                nombre_completo: respName
+              });
+            }
           }
         }
 
@@ -329,4 +365,12 @@ export async function POST(request: Request) {
 
 function cleanDni(val: string): string {
   return val.replace(/[^0-9]/g, "");
+}
+
+function normalizeString(str: string): string {
+  return str
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }

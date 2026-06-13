@@ -83,6 +83,14 @@ export default function OrdenesCompromisoPage() {
   const [projections, setProjections] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [activeView, setActiveView] = useState<"partidas" | "proyecciones">("partidas");
+  const [porcentajeActiva, setPorcentajeActiva] = useState(10);
+
+  const concepts = useMemo(() => [
+    { tipo: "becas", label: "Becas (Sueldo Básico)", badge: "Becarios Base" },
+    { tipo: "monotributos", label: "Honorarios Monotributo", badge: "Monotributistas Base" },
+    { tipo: "activa_becas", label: `Tarjeta Activa Becas (${porcentajeActiva}%)`, badge: "Activa Becarios" },
+    { tipo: "activa_monotributos", label: `Tarjeta Activa Monotributo (${porcentajeActiva}%)`, badge: "Activa Monotributistas" },
+  ], [porcentajeActiva]);
 
   // Drawer States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -116,7 +124,7 @@ export default function OrdenesCompromisoPage() {
     let mesesRestantes = 0;
     let mesesRestantesList: number[] = [];
 
-    CONCEPTS.forEach((concept) => {
+    concepts.forEach((concept) => {
       const oc = ocs.find((o) => o.tipo === concept.tipo);
       const proj = projections[concept.tipo] || { costo_mensual: 0, meses_restantes: 0, meses_restantes_list: [] };
 
@@ -159,6 +167,15 @@ export default function OrdenesCompromisoPage() {
 
       setOcs(data.ordenes || []);
       setProjections(data.proyecciones || {});
+
+      // Fetch dynamic active percentage
+      const { data: catBeca } = await supabase
+        .from("categorias_becas")
+        .select("porcentaje_activa")
+        .eq("semestre_id", currentSemester.id)
+        .limit(1)
+        .maybeSingle();
+      setPorcentajeActiva(catBeca?.porcentaje_activa ?? 10);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -327,7 +344,7 @@ export default function OrdenesCompromisoPage() {
         </div>
       ) : activeView === "partidas" ? (
         <div className={styles.grid}>
-          {CONCEPTS.map((concept) => {
+          {concepts.map((concept) => {
             const oc = ocs.find((o) => o.tipo === concept.tipo);
 
             if (!oc) {
@@ -616,7 +633,7 @@ export default function OrdenesCompromisoPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {CONCEPTS.map((concept) => {
+                  {concepts.map((concept) => {
                     const oc = ocs.find((o) => o.tipo === concept.tipo);
                     const proj = projections[concept.tipo] || { costo_mensual: 0, meses_restantes: 0 };
                     const costoMensual = proj.costo_mensual;

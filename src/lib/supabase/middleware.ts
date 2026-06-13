@@ -32,19 +32,23 @@ export const updateSession = async (request: NextRequest) => {
     }
   );
 
+  // Use getSession() instead of getUser() to avoid a network roundtrip
+  // to Supabase on every request. getSession() reads the JWT from the
+  // cookie locally, which is sufficient for route-level protection.
+  // Individual API routes still call getUser() for full server-side validation.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   // Protect /dashboard routes
-  if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
+  if (request.nextUrl.pathname.startsWith("/dashboard") && !session) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
   // Redirect logged-in users away from /login
-  if (request.nextUrl.pathname.startsWith("/login") && user) {
+  if (request.nextUrl.pathname.startsWith("/login") && session) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);

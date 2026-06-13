@@ -35,6 +35,16 @@ export async function GET(req: NextRequest) {
 
     if (semErr) throw semErr;
 
+    if (semester) {
+      const { data: catBeca } = await supabase
+        .from("categorias_becas")
+        .select("porcentaje_activa")
+        .eq("semestre_id", semester.id)
+        .limit(1)
+        .maybeSingle();
+      semester.porcentaje_activa = catBeca?.porcentaje_activa ?? 10;
+    }
+
     // 2. Query existing liquidations in DB
     const { data: savedLiquidations, error: liqErr } = await supabase
       .from("liquidaciones_mensuales")

@@ -272,7 +272,65 @@ export default function BecariosPage() {
   });
 
   const selectedSub = watch("subsecretaria_id");
+  const selectedArea = watch("area_id");
   const selectedCat = watch("categoria_beca_id");
+
+  // Reset area if it doesn't belong to the selected subsecretaría
+  useEffect(() => {
+    if (selectedSub) {
+      if (selectedArea) {
+        const belongs = areas.some((a) => a.id === selectedArea && a.subsecretaria_id === selectedSub);
+        if (!belongs) {
+          setValue("area_id", "");
+        }
+      }
+    } else {
+      setValue("area_id", "");
+    }
+  }, [selectedSub, areas, setValue, selectedArea]);
+
+  // Auto-assign responsable based on selected subsecretaria and area
+  useEffect(() => {
+    if (isAddOpen) {
+      if (selectedSub && selectedArea) {
+        const matchingResp = responsables.find(
+          (r) => r.subsecretaria_id === selectedSub && r.area_id === selectedArea && r.activo
+        );
+        if (matchingResp) {
+          setValue("responsable_id", matchingResp.id);
+        } else {
+          const subResp = responsables.find(
+            (r) => r.subsecretaria_id === selectedSub && !r.area_id && r.activo
+          );
+          setValue("responsable_id", subResp ? subResp.id : null);
+        }
+      } else {
+        setValue("responsable_id", null);
+      }
+    } else if (isEditOpen && selectedPerson) {
+      // Only auto-assign in edit mode if the user changed the subsecretaria or area from the original values
+      const subChanged = selectedSub !== selectedPerson.subsecretaria_id;
+      const areaChanged = selectedArea !== selectedPerson.area_id;
+
+      if (subChanged || areaChanged) {
+        if (selectedSub && selectedArea) {
+          const matchingResp = responsables.find(
+            (r) => r.subsecretaria_id === selectedSub && r.area_id === selectedArea && r.activo
+          );
+          if (matchingResp) {
+            setValue("responsable_id", matchingResp.id);
+          } else {
+            const subResp = responsables.find(
+              (r) => r.subsecretaria_id === selectedSub && !r.area_id && r.activo
+            );
+            setValue("responsable_id", subResp ? subResp.id : null);
+          }
+        } else {
+          setValue("responsable_id", null);
+        }
+      }
+    }
+  }, [selectedSub, selectedArea, responsables, setValue, isAddOpen, isEditOpen, selectedPerson]);
 
   useEffect(() => {
     setValue("fecha_alta", calculatedAltaFecha);
@@ -494,7 +552,8 @@ export default function BecariosPage() {
   const handleExcelSelected = async (file: File) => {
     setImportFile(file);
     try {
-      const result = await parsePeopleExcel(file, "becarios");
+      const activePct = categorias[0]?.porcentaje_activa ?? 10;
+      const result = await parsePeopleExcel(file, "becarios", activePct);
       setImportPreview(result.data);
       setImportErrors(result.errors);
       setImportSummary(result.summary);
@@ -1155,7 +1214,7 @@ export default function BecariosPage() {
                     <span className="mono font-semibold">${formAmountPreview.base.toLocaleString("es-AR")}</span>
                   </div>
                   <div className={styles.calcRow}>
-                    <span>Tarjeta Activa (10%):</span>
+                    <span>Tarjeta Activa ({categorias[0]?.porcentaje_activa ?? 10}%):</span>
                     <span className="mono font-semibold">+ ${formAmountPreview.activa.toLocaleString("es-AR")}</span>
                   </div>
                   <div className={`${styles.calcRow} ${styles.calcTotal}`}>
@@ -1445,7 +1504,7 @@ export default function BecariosPage() {
                     <span className="mono font-semibold">${formAmountPreview.base.toLocaleString("es-AR")}</span>
                   </div>
                   <div className={styles.calcRow}>
-                    <span>Tarjeta Activa (10%):</span>
+                    <span>Tarjeta Activa ({categorias[0]?.porcentaje_activa ?? 10}%):</span>
                     <span className="mono font-semibold">+ ${formAmountPreview.activa.toLocaleString("es-AR")}</span>
                   </div>
                   <div className={`${styles.calcRow} ${styles.calcTotal}`}>
@@ -1792,7 +1851,7 @@ export default function BecariosPage() {
                           <th>Área</th>
                           <th>Responsable</th>
                           <th>Importe Beca</th>
-                          <th>Tarjeta Activa (10%)</th>
+                          <th>Tarjeta Activa ({categorias[0]?.porcentaje_activa ?? 10}%)</th>
                           <th>Monto Total</th>
                         </tr>
                       </thead>

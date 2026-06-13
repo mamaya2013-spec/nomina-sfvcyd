@@ -19,6 +19,14 @@ import { createClient } from "@/lib/supabase/client";
 import { toast, Toaster } from "sonner";
 import styles from "./organica.module.css";
 
+function normalizeString(str: string): string {
+  return str
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 interface Subsecretaria {
   id: string;
   nombre: string;
@@ -127,7 +135,7 @@ export default function OrganicaConfigPage() {
         // Create
         // Check duplicate name
         const duplicate = subsecretarias.some(
-          (s) => s.nombre.toLowerCase() === subName.trim().toLowerCase()
+          (s) => normalizeString(s.nombre) === normalizeString(subName)
         );
         if (duplicate) {
           toast.warning("Ya existe una subsecretaría con ese nombre.");
@@ -252,7 +260,7 @@ export default function OrganicaConfigPage() {
         const duplicate = areas.some(
           (a) =>
             a.subsecretaria_id === areaSubId &&
-            a.nombre.toLowerCase() === areaName.trim().toLowerCase()
+            normalizeString(a.nombre) === normalizeString(areaName)
         );
         if (duplicate) {
           toast.warning("Ya existe un área con ese nombre en esta subsecretaría.");

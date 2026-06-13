@@ -183,7 +183,7 @@ export default function BecarioDetailClient({ id }: DetailProps) {
             subsecretarias(id, nombre),
             areas(id, nombre),
             responsables(id, nombre_completo, telefono, email, cargo),
-            categorias_becas(id, numero_categoria, monto, total)
+            categorias_becas(id, numero_categoria, monto, total, porcentaje_activa)
           `)
           .eq("id", id)
           .single();
@@ -361,7 +361,7 @@ export default function BecarioDetailClient({ id }: DetailProps) {
             <div className={styles.infoRow}>
               <CreditCard size={16} />
               <div>
-                <span className={styles.infoLabel}>Tarjeta Activa (10%)</span>
+                <span className={styles.infoLabel}>Tarjeta Activa ({person.categorias_becas?.porcentaje_activa ?? 10}%)</span>
                 <span className={`${styles.infoVal} mono`}>
                   + ${Number(person.importe_tarjeta_activa).toLocaleString("es-AR")}
                 </span>

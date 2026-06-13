@@ -635,3 +635,79 @@
   border: 1px solid rgba(6, 182, 212, 0.25);
   box-shadow: 0 2px 8px rgba(6, 182, 212, 0.05);
 }
+
+/* Detailed Budget Availability Table Styles */
+.ocTableResponsive {
+  overflow-x: auto;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.ocTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13.5px;
+}
+
+.ocTable th {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.ocTable td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.ocTable tr:hover {
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+.ocTable tr.totalRow {
+  background-color: rgba(255, 255, 255, 0.03);
+  font-weight: 700;
+}
+
+.ocTable tr.totalRow td {
+  border-top: 1.5px solid var(--glass-border);
+  border-bottom: 1.5px solid var(--glass-border);
+  color: var(--text-primary);
+}
+
+.monoCell {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--border-radius-sm);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.badgePositive {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--accent-emerald);
+}
+
+.badgeNegative {
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  color: var(--accent-rose);
+}
+
+.badgeNeutral {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+}

@@ -265,7 +265,7 @@ export default function LiquidacionesPage() {
       .map((l) => ({
         "Apellido y Nombre": l.apellido_nombre,
         "CUIL / CUIT": l.cuit,
-        "Concepto": "Tarjeta Activa (10%)",
+        "Concepto": `Tarjeta Activa (${semester?.porcentaje_activa ?? 10}%)`,
         "Acreditación Tarjeta ($)": l.monto_tarjeta_activa,
       }));
     const wsActivaBecarios = XLSX.utils.json_to_sheet(activaBecariosData);
@@ -277,7 +277,7 @@ export default function LiquidacionesPage() {
       .map((l) => ({
         "Apellido y Nombre": l.apellido_nombre,
         "CUIL / CUIT": l.cuit,
-        "Concepto": "Tarjeta Activa (10%)",
+        "Concepto": `Tarjeta Activa (${semester?.porcentaje_activa ?? 10}%)`,
         "Acreditación Tarjeta ($)": l.monto_tarjeta_activa,
       }));
     const wsActivaMonos = XLSX.utils.json_to_sheet(activaMonosData);
@@ -310,7 +310,7 @@ export default function LiquidacionesPage() {
     doc.text("Resumen Consolidado de Conceptos", 10, 42);
 
     const summaryRows = [
-      ["Concepto", "Personas", "Importe Base", "Tarjeta Activa (10%)", "Total Devengado"],
+      ["Concepto", "Personas", "Importe Base", `Tarjeta Activa (${semester?.porcentaje_activa ?? 10}%)`, "Total Devengado"],
       ["Becas de Capacitación", summary.becariosCount, `$${summary.becariosBase.toLocaleString("es-AR")}`, `$${summary.becariosActiva.toLocaleString("es-AR")}`, `$${summary.becariosTotal.toLocaleString("es-AR")}`],
       ["Honorarios Monotributo", summary.monosCount, `$${summary.monosBase.toLocaleString("es-AR")}`, `$${summary.monosActiva.toLocaleString("es-AR")}`, `$${summary.monosTotal.toLocaleString("es-AR")}`],
       ["Totales Generales", summary.totalCount, `$${summary.totalBase.toLocaleString("es-AR")}`, `$${summary.totalActiva.toLocaleString("es-AR")}`, `$${summary.totalGrand.toLocaleString("es-AR")}`]
@@ -494,7 +494,7 @@ export default function LiquidacionesPage() {
                 <span className={styles.kpiVal}>
                   ${summary.totalActiva.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
                 </span>
-                <span className={styles.kpiLabel}>Tarjeta Activa (10%)</span>
+                <span className={styles.kpiLabel}>Tarjeta Activa ({semester?.porcentaje_activa ?? 10}%)</span>
               </div>
             </div>
 
@@ -662,7 +662,7 @@ export default function LiquidacionesPage() {
                     <th>CUIL / CUIT</th>
                     <th>Categoría</th>
                     <th style={{ textAlign: "right" }}>Importe Base</th>
-                    <th style={{ textAlign: "right" }}>Tarjeta Activa (10%)</th>
+                    <th style={{ textAlign: "right" }}>Tarjeta Activa ({semester?.porcentaje_activa ?? 10}%)</th>
                     <th style={{ textAlign: "right" }}>Total Acreditado</th>
                   </tr>
                 </thead>

@@ -42,6 +42,7 @@ const semesterFormSchema = z.object({
   fecha_inicio: z.string().min(1, "Fecha de inicio requerida"),
   fecha_fin: z.string().min(1, "Fecha de fin requerida"),
   clonar_anterior: z.boolean(),
+  porcentaje_activa: z.number().min(0, "Mínimo 0%").max(100, "Máximo 100%"),
 });
 
 type SemesterFormValues = z.infer<typeof semesterFormSchema>;
@@ -59,6 +60,7 @@ export default function MontosPage() {
   const [loadingCats, setLoadingCats] = useState(false);
   const [savingCats, setSavingCats] = useState(false);
   const [cascadeUpdate, setCascadeUpdate] = useState(true);
+  const [porcentajeActiva, setPorcentajeActiva] = useState(10);
 
   // Asistente / Drawer States
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -99,6 +101,14 @@ export default function MontosPage() {
 
       setBecasCategories(becas || []);
       setMonoCategories(monos || []);
+
+      if (becas && becas.length > 0) {
+        setPorcentajeActiva(becas[0].porcentaje_activa ?? 10);
+      } else if (monos && monos.length > 0) {
+        setPorcentajeActiva(monos[0].porcentaje_activa ?? 10);
+      } else {
+        setPorcentajeActiva(10);
+      }
     } catch (err: any) {
       toast.error("Error al cargar categorías: " + err.message);
     } finally {
@@ -208,6 +218,7 @@ export default function MontosPage() {
       fecha_inicio: "",
       fecha_fin: "",
       clonar_anterior: true,
+      porcentaje_activa: 10,
     },
   });
 
@@ -278,6 +289,7 @@ export default function MontosPage() {
         fecha_fin: data.fecha_fin,
         categorias_becas: draftBecas,
         categorias_monotributistas: draftMonos,
+        porcentaje_activa: data.porcentaje_activa,
       };
 
       const response = await fetch("/api/semestres/crear", {
@@ -309,6 +321,7 @@ export default function MontosPage() {
         categorias_becas: becasCategories,
         categorias_monotributistas: monoCategories,
         cascadeUpdatePersonnel: cascadeUpdate,
+        porcentaje_activa: porcentajeActiva,
       };
 
       const response = await fetch("/api/semestres/update-categories", {
@@ -450,7 +463,7 @@ export default function MontosPage() {
             {selectedSemester && (
               <div className={styles.catHeader}>
                 <div className={styles.catTitleGroup}>
-                  <h3>Tablas de Importes: {selectedSemester.nombre_display}</h3>
+                  <h3>Tablas de Importes: {selectedSemester.nombre_display} ({porcentajeActiva}% Tarjeta Activa)</h3>
                   {selectedSemester.bloqueado ? (
                     <span className={styles.closedBanner}>
                       <Lock size={14} /> Modo Histórico (Solo Lectura)
@@ -464,6 +477,28 @@ export default function MontosPage() {
 
                 {!selectedSemester.bloqueado && (
                   <div className={styles.catSaveActions}>
+                    <div className={styles.percentageOption} style={{ marginRight: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <label htmlFor="porcentaje_activa_input" style={{ fontSize: "13px", fontWeight: "600", color: "var(--text-secondary)" }}>
+                        % Activa:
+                      </label>
+                      <input
+                        type="number"
+                        id="porcentaje_activa_input"
+                        value={porcentajeActiva}
+                        onChange={(e) => setPorcentajeActiva(Number(e.target.value))}
+                        style={{
+                          width: "60px",
+                          padding: "6px 8px",
+                          background: "rgba(0,0,0,0.2)",
+                          border: "1px solid var(--glass-border)",
+                          borderRadius: "4px",
+                          color: "white",
+                          textAlign: "center",
+                          outline: "none"
+                        }}
+                      />
+                    </div>
+
                     <div className={styles.cascadeOption}>
                       <input
                         type="checkbox"
@@ -504,7 +539,7 @@ export default function MontosPage() {
                       <tr>
                         <th>Nro.</th>
                         <th>Importe Base</th>
-                        <th>Tarjeta Activa (10%)</th>
+                        <th>Tarjeta Activa ({porcentajeActiva}%)</th>
                         <th>Total Mensual</th>
                       </tr>
                     </thead>
@@ -530,10 +565,10 @@ export default function MontosPage() {
                             )}
                           </td>
                           <td className="mono text-muted">
-                            ${(Number(c.monto) * 0.1).toLocaleString("es-AR")}
+                            ${(Number(c.monto) * (porcentajeActiva / 100)).toLocaleString("es-AR")}
                           </td>
                           <td className="mono font-bold text-emerald">
-                            ${(Number(c.monto) * 1.1).toLocaleString("es-AR")}
+                            ${(Number(c.monto) * (1 + porcentajeActiva / 100)).toLocaleString("es-AR")}
                           </td>
                         </tr>
                       ))}
@@ -550,7 +585,7 @@ export default function MontosPage() {
                         <th>Letra</th>
                         <th>Función / Cargo</th>
                         <th>Importe Base</th>
-                        <th>Tarjeta Activa (10%)</th>
+                        <th>Tarjeta Activa ({porcentajeActiva}%)</th>
                         <th>Total Mensual</th>
                       </tr>
                     </thead>
@@ -589,10 +624,10 @@ export default function MontosPage() {
                             )}
                           </td>
                           <td className="mono text-muted">
-                            ${(Number(c.monto) * 0.1).toLocaleString("es-AR")}
+                            ${(Number(c.monto) * (porcentajeActiva / 100)).toLocaleString("es-AR")}
                           </td>
                           <td className="mono font-bold text-emerald">
-                            ${(Number(c.monto) * 1.1).toLocaleString("es-AR")}
+                            ${(Number(c.monto) * (1 + porcentajeActiva / 100)).toLocaleString("es-AR")}
                           </td>
                         </tr>
                       ))}
@@ -768,6 +803,19 @@ export default function MontosPage() {
                 </select>
                 {errors.numero_semestre && (
                   <span className={styles.formError}>{errors.numero_semestre.message}</span>
+                )}
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Porcentaje Tarjeta Activa (%) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input-field"
+                  {...register("porcentaje_activa", { valueAsNumber: true })}
+                />
+                {errors.porcentaje_activa && (
+                  <span className={styles.formError}>{errors.porcentaje_activa.message}</span>
                 )}
               </div>
             </div>

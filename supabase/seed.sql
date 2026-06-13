@@ -1,21 +1,24 @@
 -- Seed Subsecretarías
 INSERT INTO public.subsecretarias (id, nombre, orden, activa) VALUES
-('b3310000-0000-0000-0000-000000000001', 'Gral de Vinculación y Comunicación', 1, TRUE),
-('b3320000-0000-0000-0000-000000000002', 'Subsecretaría de Cultura', 2, TRUE),
-('b3330000-0000-0000-0000-000000000003', 'Subsecretaría de Deportes', 3, TRUE),
-('b3340000-0000-0000-0000-000000000004', 'Subsecretaría de Gestión Participativa', 4, TRUE),
-('b3350000-0000-0000-0000-000000000005', 'Subsecretaría de Políticas Vecinales', 5, TRUE),
-('b3360000-0000-0000-0000-000000000006', 'Subsecretaría de Vecinalismo', 6, TRUE),
-('b3370000-0000-0000-0000-000000000007', 'Subsecretaría de Vinculación Comunitaria', 7, TRUE)
+('6fdcede0-76ed-4968-a4bd-67307b9e446f', 'Subsecretaria de Cultura', 1, TRUE),
+('67464fb5-646c-4f19-b67d-aff024d39801', 'Subsecretaria de Deportes', 2, TRUE),
+('b8024214-6bad-4136-a6bf-8fb7e3eebc7f', 'Subsecretaria de Gestion Participativa', 3, TRUE),
+('53b007a2-5c15-4e70-9d64-c7f3222813cf', 'Subsecretaria de Politicas Vecinales', 4, TRUE),
+('a6e95bab-5c54-41df-a199-a4970bc0e083', 'Subsecretaria de Vecinalismo', 5, TRUE),
+('96ecea8f-83ab-47cd-b8b8-9783a555a881', 'Subsecretaria de Vinculacion Comunitaria', 6, TRUE),
+('08f976b4-f437-4257-b3d1-72ea84882787', 'Dirección Gral de Vinculación y Comunicación', 7, TRUE),
+('76200721-59c9-4c22-aa5a-3521aec0d4df', 'Secretaria Fortalecimiento Vecinal y Deportes', 8, TRUE),
+('f3a31002-cbd4-4c46-8683-b30c1954a788', 'Centro Cultural Manuel de Falla', 9, TRUE),
+('2090cc32-6710-4344-8a8c-119bb29bdec9', 'Direcion de Centros Vecinales', 10, TRUE)
 ON CONFLICT (nombre) DO NOTHING;
 
 -- Seed Areas
 INSERT INTO public.areas (id, subsecretaria_id, nombre, orden, activa) VALUES
-('a1110000-0000-0000-0000-000000000001', 'b3330000-0000-0000-0000-000000000003', 'Dirección de Deportes Social', 1, TRUE),
-('a1120000-0000-0000-0000-000000000002', 'b3320000-0000-0000-0000-000000000002', 'Dirección de Industrias Creativas', 1, TRUE),
-('a1130000-0000-0000-0000-000000000003', 'b3360000-0000-0000-0000-000000000006', 'Dirección de Centros Vecinales', 1, TRUE),
-('a1140000-0000-0000-0000-000000000004', 'b3340000-0000-0000-0000-000000000004', 'Dirección de Presupuesto Participativo', 1, TRUE),
-('a1150000-0000-0000-0000-000000000005', 'b3310000-0000-0000-0000-000000000001', 'Oficina de Prensa y Comunicación', 1, TRUE)
+('a1110000-0000-0000-0000-000000000001', '67464fb5-646c-4f19-b67d-aff024d39801', 'Dirección de Deportes Social', 1, TRUE),
+('a1120000-0000-0000-0000-000000000002', '6fdcede0-76ed-4968-a4bd-67307b9e446f', 'Dirección de Industrias Creativas', 1, TRUE),
+('a1130000-0000-0000-0000-000000000003', 'a6e95bab-5c54-41df-a199-a4970bc0e083', 'Dirección de Centros Vecinales', 1, TRUE),
+('a1140000-0000-0000-0000-000000000004', 'b8024214-6bad-4136-a6bf-8fb7e3eebc7f', 'Dirección de Presupuesto Participativo', 1, TRUE),
+('a1150000-0000-0000-0000-000000000005', '08f976b4-f437-4257-b3d1-72ea84882787', 'Oficina de Prensa y Comunicación', 1, TRUE)
 ON CONFLICT (subsecretaria_id, nombre) DO NOTHING;
 
 -- Seed Semestre Actual (2026 - 1S)

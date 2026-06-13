@@ -373,6 +373,78 @@ export default function DashboardPage() {
     const ocTotalRemaining = ocTotalAssigned - ocTotalExecuted;
     const ocProgress = ocTotalAssigned > 0 ? (ocTotalExecuted / ocTotalAssigned) * 100 : 0;
 
+    // Detailed OC vs Projected Breakdown
+    const getOcDetails = (tipo: string) => {
+      const oc = ocs.find((o) => o.tipo === tipo);
+      const assigned = Number(oc?.monto_asignado || 0);
+      const executed = Number(oc?.monto_ejecutado || 0);
+      return {
+        assigned,
+        executed,
+        remaining: assigned - executed,
+      };
+    };
+
+    const becasBaseOc = getOcDetails("becas");
+    const becasActivaOc = getOcDetails("activa_becas");
+    const monosBaseOc = getOcDetails("monotributos");
+    const monosActivaOc = getOcDetails("activa_monotributos");
+
+    const projBecasBaseSemestral = monthlyBecasBase * 6;
+    const projBecasActivaSemestral = monthlyBecasActiva * 6;
+    const projMonosBaseSemestral = monthlyMonosBase * 6;
+    const projMonosActivaSemestral = monthlyMonosActiva * 6;
+
+    const ocBreakdown = [
+      {
+        name: "Becarios (Base)",
+        type: "becas",
+        ocAssigned: becasBaseOc.assigned,
+        ocExecuted: becasBaseOc.executed,
+        ocRemaining: becasBaseOc.remaining,
+        projMonthly: monthlyBecasBase,
+        projSemestral: projBecasBaseSemestral,
+        dispProj: becasBaseOc.assigned - projBecasBaseSemestral,
+      },
+      {
+        name: "Becarios (Tarjeta Activa)",
+        type: "activa_becas",
+        ocAssigned: becasActivaOc.assigned,
+        ocExecuted: becasActivaOc.executed,
+        ocRemaining: becasActivaOc.remaining,
+        projMonthly: monthlyBecasActiva,
+        projSemestral: projBecasActivaSemestral,
+        dispProj: becasActivaOc.assigned - projBecasActivaSemestral,
+      },
+      {
+        name: "Monotributistas (Base)",
+        type: "monotributos",
+        ocAssigned: monosBaseOc.assigned,
+        ocExecuted: monosBaseOc.executed,
+        ocRemaining: monosBaseOc.remaining,
+        projMonthly: monthlyMonosBase,
+        projSemestral: projMonosBaseSemestral,
+        dispProj: monosBaseOc.assigned - projMonosBaseSemestral,
+      },
+      {
+        name: "Monotributistas (Tarjeta Activa)",
+        type: "activa_monotributos",
+        ocAssigned: monosActivaOc.assigned,
+        ocExecuted: monosActivaOc.executed,
+        ocRemaining: monosActivaOc.remaining,
+        projMonthly: monthlyMonosActiva,
+        projSemestral: projMonosActivaSemestral,
+        dispProj: monosActivaOc.assigned - projMonosActivaSemestral,
+      },
+    ];
+
+    const totalOcAssigned = ocBreakdown.reduce((sum, item) => sum + item.ocAssigned, 0);
+    const totalOcExecuted = ocBreakdown.reduce((sum, item) => sum + item.ocExecuted, 0);
+    const totalOcRemaining = ocBreakdown.reduce((sum, item) => sum + item.ocRemaining, 0);
+    const totalProjMonthly = ocBreakdown.reduce((sum, item) => sum + item.projMonthly, 0);
+    const totalProjSemestral = ocBreakdown.reduce((sum, item) => sum + item.projSemestral, 0);
+    const totalDispProj = ocBreakdown.reduce((sum, item) => sum + item.dispProj, 0);
+
     return {
       totalBecarios,
       totalMonos,
@@ -389,6 +461,15 @@ export default function DashboardPage() {
       ocTotalExecuted,
       ocTotalRemaining,
       ocProgress,
+      ocBreakdown,
+      totals: {
+        ocAssigned: totalOcAssigned,
+        ocExecuted: totalOcExecuted,
+        ocRemaining: totalOcRemaining,
+        projMonthly: totalProjMonthly,
+        projSemestral: totalProjSemestral,
+        dispProj: totalDispProj,
+      }
     };
   }, [becariosFiltered, monosFiltered, ocs]);
 
@@ -1016,6 +1097,81 @@ export default function DashboardPage() {
       {/* 6. Tabs Content */}
       {activeTab === "general" && (
         <div className={styles.chartsGrid}>
+          {/* Card: Análisis de Disponibilidad Proyectada (OC vs Proyectado) */}
+          <div className={`${styles.chartCard} ${styles.chartCardLarge} glass-panel`} style={{ minHeight: "auto" }}>
+            <div className={styles.chartHeader}>
+              <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>Análisis de Disponibilidad Proyectada (OC vs Gasto Proyectado)</span>
+              </h3>
+            </div>
+            <div className={styles.ocTableResponsive}>
+              <table className={styles.ocTable}>
+                <thead>
+                  <tr>
+                    <th>Partida / Tipo</th>
+                    <th>Presupuesto OC</th>
+                    <th>Ejecutado Real</th>
+                    <th>Remanente OC</th>
+                    <th>Gasto Proyectado (Mes)</th>
+                    <th>Gasto Proyectado (Semestre)</th>
+                    <th>Disponible Proyectado</th>
+                    <th>Estado Proyectado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.ocBreakdown.map((row) => {
+                    const isDeficit = row.dispProj < 0;
+                    return (
+                      <tr key={row.type}>
+                        <td><strong>{row.name}</strong></td>
+                        <td className={styles.monoCell}>{formatCurrency(row.ocAssigned)}</td>
+                        <td className={styles.monoCell}>{formatCurrency(row.ocExecuted)}</td>
+                        <td className={styles.monoCell}>{formatCurrency(row.ocRemaining)}</td>
+                        <td className={styles.monoCell}>{formatCurrency(row.projMonthly)}</td>
+                        <td className={styles.monoCell}>{formatCurrency(row.projSemestral)}</td>
+                        <td
+                          className={styles.monoCell}
+                          style={{
+                            fontWeight: 600,
+                            color: isDeficit ? "var(--accent-rose)" : "var(--accent-emerald)"
+                          }}
+                        >
+                          {formatCurrency(row.dispProj)}
+                        </td>
+                        <td>
+                          <span className={`${styles.badge} ${isDeficit ? styles.badgeNegative : styles.badgePositive}`}>
+                            {isDeficit ? "Déficit Proyectado" : "Presupuesto OK"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className={styles.totalRow}>
+                    <td>TOTAL GENERAL</td>
+                    <td className={styles.monoCell}>{formatCurrency(metrics.totals.ocAssigned)}</td>
+                    <td className={styles.monoCell}>{formatCurrency(metrics.totals.ocExecuted)}</td>
+                    <td className={styles.monoCell}>{formatCurrency(metrics.totals.ocRemaining)}</td>
+                    <td className={styles.monoCell}>{formatCurrency(metrics.totals.projMonthly)}</td>
+                    <td className={styles.monoCell}>{formatCurrency(metrics.totals.projSemestral)}</td>
+                    <td
+                      className={styles.monoCell}
+                      style={{
+                        color: metrics.totals.dispProj < 0 ? "var(--accent-rose)" : "var(--accent-emerald)"
+                      }}
+                    >
+                      {formatCurrency(metrics.totals.dispProj)}
+                    </td>
+                    <td>
+                      <span className={`${styles.badge} ${metrics.totals.dispProj < 0 ? styles.badgeNegative : styles.badgePositive}`}>
+                        {metrics.totals.dispProj < 0 ? "Déficit Total" : "Superávit Total"}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Chart 1: Partidas PieChart */}
           <div className={`${styles.chartCard} glass-panel`}>
             <div className={styles.chartHeader}>
@@ -1061,60 +1217,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Chart 2: Budget Breakdown BarChart */}
-          <div className={`${styles.chartCard} glass-panel`}>
-            <div className={styles.chartHeader}>
-              <h3>
-                {selectedSub
-                  ? "Asignación Presupuestaria por Área"
-                  : "Presupuesto Asignado por Subsecretaría"}
-              </h3>
-              <button
-                className={styles.downloadBtn}
-                onClick={() => downloadChart("bar-chart-container", "gasto_subsecretarias.png")}
-              >
-                <Download size={12} />
-                <span>PNG</span>
-              </button>
-            </div>
-            <div id="bar-chart-container" className={styles.chartWrapper}>
-              {isMounted && barData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                    <XAxis
-                      dataKey="name"
-                      stroke="var(--text-secondary)"
-                      fontSize={10}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="var(--text-secondary)"
-                      fontSize={10}
-                      tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="presupuesto" fill="var(--accent-blue)" radius={[4, 4, 0, 0]}>
-                      {barData.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={selectedSub ? "var(--accent-cyan)" : "var(--accent-blue)"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className={styles.loadingSpinner}>Sin registros presupuestarios</div>
-              )}
-            </div>
-          </div>
-
           {/* Chart 3: LineChart Altas vs Bajas */}
-          <div className={`${styles.chartCard} ${styles.chartCardLarge} glass-panel`}>
+          <div className={`${styles.chartCard} glass-panel`}>
             <div className={styles.chartHeader}>
               <h3>Curva Temporal de Movimientos (Altas vs Bajas - {selectedYear})</h3>
               <button
@@ -1160,6 +1264,59 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               ) : (
                 <div className={styles.loadingSpinner}>Cargando historial de movimientos...</div>
+              )}
+            </div>
+          </div>
+
+          {/* Chart 2: Budget Breakdown BarChart */}
+          <div className={`${styles.chartCard} ${styles.chartCardLarge} glass-panel`}>
+            <div className={styles.chartHeader}>
+              <h3>
+                {selectedSub
+                  ? "Asignación Presupuestaria por Área"
+                  : "Presupuesto Asignado por Subsecretaría"}
+              </h3>
+              <button
+                className={styles.downloadBtn}
+                onClick={() => downloadChart("bar-chart-container", "gasto_subsecretarias.png")}
+              >
+                <Download size={12} />
+                <span>PNG</span>
+              </button>
+            </div>
+            <div id="bar-chart-container" className={styles.chartWrapper}>
+              {isMounted && barData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={barData} margin={{ top: 10, right: 10, left: 10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis
+                      dataKey="name"
+                      stroke="var(--text-secondary)"
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                    />
+                    <YAxis
+                      stroke="var(--text-secondary)"
+                      fontSize={10}
+                      tickFormatter={(v) => `${(v / 1000000).toFixed(1)}M`}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="presupuesto" fill="var(--accent-blue)" radius={[4, 4, 0, 0]}>
+                      {barData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={selectedSub ? "var(--accent-cyan)" : "var(--accent-blue)"}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className={styles.loadingSpinner}>Sin registros presupuestarios</div>
               )}
             </div>
           </div>

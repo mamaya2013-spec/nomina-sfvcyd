@@ -92,7 +92,8 @@ function cleanDocString(value: any): string {
 
 export async function parsePeopleExcel(
   file: File,
-  type: "becarios" | "monotributistas"
+  type: "becarios" | "monotributistas",
+  porcentajeActiva: number = 10
 ): Promise<ParseResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -248,8 +249,8 @@ export async function parsePeopleExcel(
             continue;
           }
 
-          // Calculate Activa (10%) and Total
-          const calculatedActiva = Math.round(importeMensual * 0.10 * 100) / 100;
+          // Calculate Activa and Total
+          const calculatedActiva = Math.round(importeMensual * (porcentajeActiva / 100) * 100) / 100;
           const calculatedTotal = Math.round((importeMensual + calculatedActiva) * 100) / 100;
 
           parsedData.push({

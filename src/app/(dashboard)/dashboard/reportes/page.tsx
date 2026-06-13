@@ -305,6 +305,7 @@ export default function ReportesPage() {
 
     setTimeout(() => {
       try {
+        const activePct = categoriasBecas[0]?.porcentaje_activa ?? categoriasMonos[0]?.porcentaje_activa ?? 10;
         let headers: string[] = [];
         let rows: any[][] = [];
         let filename = "";
@@ -344,7 +345,7 @@ export default function ReportesPage() {
         switch (selectedTemplate) {
           // ==================== GRUPO 1: BECARIOS ====================
           case 1: // Nómina General
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total", "Estado"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total", "Estado"];
             let becs1 = selectedSub ? becarios.filter((b) => b.subsecretaria_id === selectedSub) : becarios;
             if (selectedArea) becs1 = becs1.filter((b) => b.area_id === selectedArea);
             rows = becs1.map(mapBecarioToRow);
@@ -352,7 +353,7 @@ export default function ReportesPage() {
             break;
 
           case 2: // Activos por Subsecretaría
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total", "Estado"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total", "Estado"];
             let becs2 = becarios.filter((b) => b.estado === "Activo");
             if (selectedSub) becs2 = becs2.filter((b) => b.subsecretaria_id === selectedSub);
             rows = becs2.map(mapBecarioToRow);
@@ -360,7 +361,7 @@ export default function ReportesPage() {
             break;
 
           case 3: // Activos por Área
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total", "Estado"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total", "Estado"];
             let becs3 = becarios.filter((b) => b.estado === "Activo");
             if (selectedSub) becs3 = becs3.filter((b) => b.subsecretaria_id === selectedSub);
             if (selectedArea) becs3 = becs3.filter((b) => b.area_id === selectedArea);
@@ -369,7 +370,7 @@ export default function ReportesPage() {
             break;
 
           case 4: // Por Categoría de Beca
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total", "Estado"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total", "Estado"];
             let becs4 = becarios.filter((b) => b.estado === "Activo");
             if (selectedCat) becs4 = becs4.filter((b) => b.categoria_beca_id === selectedCat);
             rows = becs4.map(mapBecarioToRow);
@@ -377,7 +378,7 @@ export default function ReportesPage() {
             break;
 
           case 5: // Con Tarjeta Activa Asignada
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "N° Tarjeta", "Básico", "Activa (10%)", "Total"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "N° Tarjeta", "Básico", `Activa (${activePct}%)`, "Total"];
             let becs5 = becarios.filter((b) => b.estado === "Activo" && b.tarjeta_activa_nro);
             if (selectedSub) becs5 = becs5.filter((b) => b.subsecretaria_id === selectedSub);
             rows = becs5.map((b) => [
@@ -395,7 +396,7 @@ export default function ReportesPage() {
             break;
 
           case 6: // Con Tarjeta Activa Faltante
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total"];
             let becs6 = becarios.filter((b) => b.estado === "Activo" && !b.tarjeta_activa_nro);
             if (selectedSub) becs6 = becs6.filter((b) => b.subsecretaria_id === selectedSub);
             rows = becs6.map(mapBecarioToRow);
@@ -440,7 +441,7 @@ export default function ReportesPage() {
 
           // ==================== GRUPO 2: MONOTRIBUTISTAS ====================
           case 9: // Nómina General
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total", "Estado"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total", "Estado"];
             let monos1 = selectedSub ? monotributistas.filter((m) => m.subsecretaria_id === selectedSub) : monotributistas;
             if (selectedArea) monos1 = monos1.filter((m) => m.area_id === selectedArea);
             rows = monos1.map(mapMonoToRow);
@@ -448,7 +449,7 @@ export default function ReportesPage() {
             break;
 
           case 10: // Activos por Subsecretaría
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total", "Estado"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total", "Estado"];
             let monos2 = monotributistas.filter((m) => m.estado === "Activo");
             if (selectedSub) monos2 = monos2.filter((m) => m.subsecretaria_id === selectedSub);
             rows = monos2.map(mapMonoToRow);
@@ -456,7 +457,7 @@ export default function ReportesPage() {
             break;
 
           case 11: // Activos por Área
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total", "Estado"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total", "Estado"];
             let monos3 = monotributistas.filter((m) => m.estado === "Activo");
             if (selectedSub) monos3 = monos3.filter((m) => m.subsecretaria_id === selectedSub);
             if (selectedArea) monos3 = monos3.filter((m) => m.area_id === selectedArea);
@@ -465,7 +466,7 @@ export default function ReportesPage() {
             break;
 
           case 12: // Por Categoría (Letra)
-            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", "Activa (10%)", "Total", "Estado"];
+            headers = ["Nombre", "CUIL/CUIT", "DNI", "Subsecretaría", "Área", "Responsable", "Categoría", "Básico", `Activa (${activePct}%)`, "Total", "Estado"];
             let monos4 = monotributistas.filter((m) => m.estado === "Activo");
             if (selectedCat) monos4 = monos4.filter((m) => m.categoria_mono_id === selectedCat);
             rows = monos4.map(mapMonoToRow);
@@ -577,7 +578,7 @@ export default function ReportesPage() {
 
           // ==================== GRUPO 3: DEVENGAMIENTOS Y PRESUPUESTOS ====================
           case 17: // Consolidado de Devengamiento por Secretaría
-            headers = ["Mes", "Año", "Becarios", "Monotributistas", "Presupuesto Base", "Tarjeta Activa (10%)", "Total Devengado"];
+            headers = ["Mes", "Año", "Becarios", "Monotributistas", "Presupuesto Base", `Tarjeta Activa (${activePct}%)`, "Total Devengado"];
             const monthlyMap: { [key: string]: { month: number; year: number; becarios: number; monos: number; base: number; activa: number; total: number } } = {};
             
             liquidaciones.forEach((l) => {
@@ -683,8 +684,8 @@ export default function ReportesPage() {
               const conceptLabels: { [key: string]: string } = {
                 becas: "Becas de Capacitación (Base)",
                 monotributos: "Monotributistas (Base)",
-                activa_becas: "Tarjeta Activa Becarios (10%)",
-                activa_monotributos: "Tarjeta Activa Monotributistas (10%)"
+                activa_becas: `Tarjeta Activa Becarios (${activePct}%)`,
+                activa_monotributos: `Tarjeta Activa Monotributistas (${activePct}%)`
               };
 
               return [
@@ -905,6 +906,7 @@ export default function ReportesPage() {
 
     setTimeout(async () => {
       try {
+        const activePct = categoriasBecas[0]?.porcentaje_activa ?? categoriasMonos[0]?.porcentaje_activa ?? 10;
         const { default: jsPDF } = await import("jspdf");
         const doc = new jsPDF("p", "mm", "a4");
 
@@ -949,8 +951,8 @@ export default function ReportesPage() {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(10.5);
         doc.text(`• Total Devengado en el Período: ${formatCurrency(totalPaid)}`, 18, 54);
-        doc.text(`  - Concepto Becarios (Base + 10% Activa): ${formatCurrency(becsPaid)}`, 18, 60);
-        doc.text(`  - Concepto Monotributistas (Base + 10% Activa): ${formatCurrency(monosPaid)}`, 18, 66);
+        doc.text(`  - Concepto Becarios (Base + ${activePct}% Activa): ${formatCurrency(becsPaid)}`, 18, 60);
+        doc.text(`  - Concepto Monotributistas (Base + ${activePct}% Activa): ${formatCurrency(monosPaid)}`, 18, 66);
         doc.text(`• Agentes Devengados: ${liqs.length} personas en nómina activa.`, 18, 72);
 
         doc.setFont("helvetica", "bold");

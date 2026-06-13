@@ -165,6 +165,65 @@ export default function ResponsablesConfigPage() {
     setIsEditOpen(true);
   };
 
+  // Synchronize members' responsable_id with active responsibles from config
+  const syncMembersResponsibles = async () => {
+    // 1. Fetch active responsibles
+    const { data: resps, error: respErr } = await supabase
+      .from("responsables")
+      .select("id, subsecretaria_id, area_id")
+      .eq("activo", true);
+    
+    if (respErr) throw respErr;
+    if (!resps) return;
+
+    const findCorrectResp = (subId: string, areaId: string) => {
+      const areaResp = resps.find((r) => r.subsecretaria_id === subId && r.area_id === areaId);
+      if (areaResp) return areaResp.id;
+      const subResp = resps.find((r) => r.subsecretaria_id === subId && !r.area_id);
+      return subResp ? subResp.id : null;
+    };
+
+    // 2. Fetch and sync active becarios
+    const { data: becarios, error: becErr } = await supabase
+      .from("becarios")
+      .select("id, subsecretaria_id, area_id, responsable_id")
+      .eq("estado", "Activo");
+
+    if (becErr) throw becErr;
+    if (becarios) {
+      for (const b of becarios) {
+        const correctRespId = findCorrectResp(b.subsecretaria_id, b.area_id);
+        if (b.responsable_id !== correctRespId) {
+          const { error: updErr } = await supabase
+            .from("becarios")
+            .update({ responsable_id: correctRespId })
+            .eq("id", b.id);
+          if (updErr) console.error("Error updating becario:", updErr);
+        }
+      }
+    }
+
+    // 3. Fetch and sync active monotributistas
+    const { data: monos, error: monErr } = await supabase
+      .from("monotributistas")
+      .select("id, subsecretaria_id, area_id, responsable_id")
+      .eq("estado", "Activo");
+
+    if (monErr) throw monErr;
+    if (monos) {
+      for (const m of monos) {
+        const correctRespId = findCorrectResp(m.subsecretaria_id, m.area_id);
+        if (m.responsable_id !== correctRespId) {
+          const { error: updErr } = await supabase
+            .from("monotributistas")
+            .update({ responsable_id: correctRespId })
+            .eq("id", m.id);
+          if (updErr) console.error("Error updating monotributista:", updErr);
+        }
+      }
+    }
+  };
+
   // Submit Add
   const onAddSubmit = async (data: FormValues) => {
     try {
@@ -195,6 +254,13 @@ export default function ResponsablesConfigPage() {
       setIsAddOpen(false);
       reset();
       fetchData();
+      
+      // Trigger cascade sync in background
+      toast.promise(syncMembersResponsibles(), {
+        loading: "Sincronizando responsables en la nómina...",
+        success: "Nómina sincronizada correctamente.",
+        error: "Error al sincronizar responsables de la nómina.",
+      });
     } catch (err: any) {
       toast.error("Error al registrar responsable: " + err.message);
     }
@@ -236,6 +302,13 @@ export default function ResponsablesConfigPage() {
       toast.success("Responsable actualizado con éxito.");
       setIsEditOpen(false);
       fetchData();
+
+      // Trigger cascade sync in background
+      toast.promise(syncMembersResponsibles(), {
+        loading: "Sincronizando responsables en la nómina...",
+        success: "Nómina sincronizada correctamente.",
+        error: "Error al sincronizar responsables de la nómina.",
+      });
     } catch (err: any) {
       toast.error("Error al actualizar responsable: " + err.message);
     }
@@ -265,6 +338,13 @@ export default function ResponsablesConfigPage() {
 
       toast.success(`Responsable ${newStatus ? "activado" : "desactivado"} con éxito.`);
       fetchData();
+
+      // Trigger cascade sync in background
+      toast.promise(syncMembersResponsibles(), {
+        loading: "Sincronizando responsables en la nómina...",
+        success: "Nómina sincronizada correctamente.",
+        error: "Error al sincronizar responsables de la nómina.",
+      });
     } catch (err: any) {
       toast.error("Error al cambiar estado: " + err.message);
     }

@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { semesterId, categorias_becas, categorias_monotributistas, cascadeUpdatePersonnel } = body;
+    const { semesterId, categorias_becas, categorias_monotributistas, cascadeUpdatePersonnel, porcentaje_activa } = body;
 
     if (!semesterId) {
       return NextResponse.json({ error: "Falta el ID del semestre." }, { status: 400 });
@@ -30,9 +30,14 @@ export async function POST(req: NextRequest) {
 
     // 1. Update Becas Categories
     for (const cat of categorias_becas) {
+      const updateData: any = { monto: cat.monto };
+      if (porcentaje_activa !== undefined) {
+        updateData.porcentaje_activa = Number(porcentaje_activa);
+      }
+
       const { data: updatedCat, error: catError } = await supabase
         .from("categorias_becas")
-        .update({ monto: cat.monto })
+        .update(updateData)
         .eq("id", cat.id)
         .select()
         .single();
@@ -49,8 +54,11 @@ export async function POST(req: NextRequest) {
 
         if (affectedBecs) {
           for (const bec of affectedBecs) {
-            // Only update if the amount actually changed
-            if (Number(bec.importe_mensual_beca) !== Number(updatedCat.monto)) {
+            // Only update if the amount actually changed (either base or active card amount)
+            if (
+              Number(bec.importe_mensual_beca) !== Number(updatedCat.monto) ||
+              Number(bec.importe_tarjeta_activa) !== Number(updatedCat.monto_activa)
+            ) {
               const { error: updateBecError } = await supabase
                 .from("becarios")
                 .update({
@@ -88,12 +96,17 @@ export async function POST(req: NextRequest) {
 
     // 2. Update Monotributo Categories
     for (const cat of categorias_monotributistas) {
+      const updateData: any = {
+        monto: cat.monto,
+        descripcion_categoria: cat.descripcion_categoria || null,
+      };
+      if (porcentaje_activa !== undefined) {
+        updateData.porcentaje_activa = Number(porcentaje_activa);
+      }
+
       const { data: updatedCat, error: catError } = await supabase
         .from("categorias_monotributistas")
-        .update({
-          monto: cat.monto,
-          descripcion_categoria: cat.descripcion_categoria || null,
-        })
+        .update(updateData)
         .eq("id", cat.id)
         .select()
         .single();
@@ -110,7 +123,10 @@ export async function POST(req: NextRequest) {
 
         if (affectedMonos) {
           for (const mono of affectedMonos) {
-            if (Number(mono.importe_mensual_monotributo) !== Number(updatedCat.monto)) {
+            if (
+              Number(mono.importe_mensual_monotributo) !== Number(updatedCat.monto) ||
+              Number(mono.importe_tarjeta_activa) !== Number(updatedCat.monto_activa)
+            ) {
               const { error: updateMonoError } = await supabase
                 .from("monotributistas")
                 .update({
