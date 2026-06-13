@@ -220,6 +220,8 @@ export default function PublicCampaignPortalPage({
         return <span className={`${styles.badge} ${styles.badge_pendiente}`}>Pendiente</span>;
       case "rechazado":
         return <span className={`${styles.badge} ${styles.badge_rechazado}`}>Rechazado</span>;
+      case "turno":
+        return <span className={`${styles.badge} ${styles.badge_pendiente}`} style={{ background: "rgba(245, 158, 11, 0.15)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.3)" }}>Turno Registrado</span>;
       default:
         return <span className={`${styles.badge} ${styles.badge_faltante}`}>Faltante</span>;
     }
@@ -229,7 +231,7 @@ export default function PublicCampaignPortalPage({
   const requiredDocs = campaign?.tipo_documentos_requeridos || [];
   const completedDocsCount = requiredDocs.filter((reqType) => {
     const doc = documents.find((d) => d.tipo_documento === reqType);
-    return doc && (doc.estado_revision === "aprobado" || doc.estado_revision === "pendiente");
+    return doc && !doc.es_turno && (doc.estado_revision === "aprobado" || doc.estado_revision === "pendiente");
   }).length;
   const progressPercent = requiredDocs.length > 0
     ? Math.round((completedDocsCount / requiredDocs.length) * 100)
@@ -372,13 +374,16 @@ export default function PublicCampaignPortalPage({
           <div className={styles.docGrid}>
             {requiredDocs.map((docType) => {
               const doc = documents.find((d) => d.tipo_documento === docType);
-              const status = doc?.estado_revision || "faltante";
+              let status = doc?.estado_revision || "faltante";
+              if (doc?.es_turno) {
+                status = "turno";
+              }
               const isUploading = !!uploading[docType];
 
               return (
                 <div
                   key={docType}
-                  className={`${styles.docItem} ${styles[`docItem_${status}`]}`}
+                  className={`${styles.docItem} ${status === "turno" ? styles.docItem_pendiente : (styles[`docItem_${status}`] || "")}`}
                 >
                   <div className={styles.docHeader}>
                     <div>
@@ -397,6 +402,17 @@ export default function PublicCampaignPortalPage({
                     <div className={styles.rejectedAlert}>
                       <span className={styles.rejectedAlertTitle}>Corrección Solicitada</span>
                       <p>{doc.observaciones_revision}</p>
+                    </div>
+                  )}
+
+                  {status === "turno" && doc && (
+                    <div className={styles.rejectedAlert} style={{ background: "rgba(245, 158, 11, 0.08)", borderColor: "rgba(245, 158, 11, 0.2)", color: "#fef3c7", marginBottom: "16px" }}>
+                      <span className={styles.rejectedAlertTitle} style={{ color: "#f59e0b" }}>Comprobante de Turno Registrado</span>
+                      <p>
+                        Presentaste un comprobante de turno programado para el día <strong>{new Date(doc.fecha_turno + "T00:00:00").toLocaleDateString("es-AR")}</strong>.
+                        <br />
+                        <em>Cuando obtengas el certificado definitivo, subilo a continuación para completar este requerimiento.</em>
+                      </p>
                     </div>
                   )}
 
@@ -440,7 +456,7 @@ export default function PublicCampaignPortalPage({
                   )}
 
                   {/* Drag and Drop Zone / File Info */}
-                  {status === "faltante" || status === "rechazado" ? (
+                  {status === "faltante" || status === "rechazado" || status === "turno" ? (
                     isUploading ? (
                       <div className={styles.uploadingState}>
                         <Loader2 size={24} className={styles.spinner} />
