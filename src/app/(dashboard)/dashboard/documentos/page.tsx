@@ -355,24 +355,36 @@ export default function DocumentosDashboardPage() {
       const resolvedBecarios: Record<string, any> = {};
       const resolvedMonotributistas: Record<string, any> = {};
 
+      const CHUNK_SIZE = 100;
+
+      // Fetch becarios in chunks to avoid HTTP Header / URL length overflow
       if (becarioIds.length > 0) {
-        const { data: bData } = await supabase
-          .from("becarios")
-          .select("id, apellido_nombre, cuit, dni, subsecretaria_id, area_id, responsable_id, telefono, email")
-          .in("id", becarioIds);
-        bData?.forEach((b) => {
-          resolvedBecarios[b.id] = b;
-        });
+        for (let i = 0; i < becarioIds.length; i += CHUNK_SIZE) {
+          const chunk = becarioIds.slice(i, i + CHUNK_SIZE);
+          const { data: bData, error: bErr } = await supabase
+            .from("becarios")
+            .select("id, apellido_nombre, cuit, dni, subsecretaria_id, area_id, responsable_id, telefono, email")
+            .in("id", chunk);
+          if (bErr) throw bErr;
+          bData?.forEach((b) => {
+            resolvedBecarios[b.id] = b;
+          });
+        }
       }
 
+      // Fetch monotributistas in chunks to avoid HTTP Header / URL length overflow
       if (monotributistaIds.length > 0) {
-        const { data: mData } = await supabase
-          .from("monotributistas")
-          .select("id, apellido_nombre, cuit, dni, subsecretaria_id, area_id, responsable_id, telefono, email")
-          .in("id", monotributistaIds);
-        mData?.forEach((m) => {
-          resolvedMonotributistas[m.id] = m;
-        });
+        for (let i = 0; i < monotributistaIds.length; i += CHUNK_SIZE) {
+          const chunk = monotributistaIds.slice(i, i + CHUNK_SIZE);
+          const { data: mData, error: mErr } = await supabase
+            .from("monotributistas")
+            .select("id, apellido_nombre, cuit, dni, subsecretaria_id, area_id, responsable_id, telefono, email")
+            .in("id", chunk);
+          if (mErr) throw mErr;
+          mData?.forEach((m) => {
+            resolvedMonotributistas[m.id] = m;
+          });
+        }
       }
 
       // 3. Fetch related documents to check for "es_turno"
@@ -380,12 +392,53 @@ export default function DocumentosDashboardPage() {
       const resolvedDocs: Record<string, any[]> = {};
       
       if (allPersonaIds.length > 0) {
-        const { data: docsData } = await supabase
-          .from("documentos")
-          .select("id, persona_id, tipo_documento, es_turno, fecha_turno, estado_revision, url_google_drive, url_supabase, created_at")
-          .in("persona_id", allPersonaIds);
+        let docsData: any[] = [];
+        let queryWithTurnFieldsFailed = false;
+
+        // Try chunked fetching with es_turno and fecha_turno first
+        try {
+          for (let i = 0; i < allPersonaIds.length; i += CHUNK_SIZE) {
+            const chunk = allPersonaIds.slice(i, i + CHUNK_SIZE);
+            const { data: chunkDocs, error: docsErr } = await supabase
+              .from("documentos")
+              .select("id, persona_id, tipo_documento, es_turno, fecha_turno, estado_revision, url_google_drive, url_supabase, created_at")
+              .in("persona_id", chunk);
+            
+            if (docsErr) throw docsErr;
+            if (chunkDocs) docsData.push(...chunkDocs);
+          }
+        } catch (err: any) {
+          // If we fail due to es_turno column not existing in DB (code 42703), fallback
+          if (err.code === "42703" || (err.message && err.message.includes("es_turno"))) {
+            queryWithTurnFieldsFailed = true;
+            docsData = []; // clear any partial data
+          } else {
+            throw err;
+          }
+        }
+
+        // Fallback: fetch without es_turno / fecha_turno fields if the database is missing them
+        if (queryWithTurnFieldsFailed) {
+          for (let i = 0; i < allPersonaIds.length; i += CHUNK_SIZE) {
+            const chunk = allPersonaIds.slice(i, i + CHUNK_SIZE);
+            const { data: chunkDocs, error: docsErr } = await supabase
+              .from("documentos")
+              .select("id, persona_id, tipo_documento, estado_revision, url_google_drive, url_supabase, created_at")
+              .in("persona_id", chunk);
+            
+            if (docsErr) throw docsErr;
+            if (chunkDocs) {
+              const mappedChunkDocs = chunkDocs.map((doc: any) => ({
+                ...doc,
+                es_turno: false,
+                fecha_turno: null,
+              }));
+              docsData.push(...mappedChunkDocs);
+            }
+          }
+        }
         
-        docsData?.forEach((doc) => {
+        docsData.forEach((doc) => {
           if (!resolvedDocs[doc.persona_id]) {
             resolvedDocs[doc.persona_id] = [];
           }

@@ -79,11 +79,33 @@ export async function GET(
     }
 
     // 4. Fetch already uploaded documents for this campaign
-    const { data: docs } = await supabase
-      .from("documentos")
-      .select("id, tipo_documento, nombre_archivo, url_supabase, estado_revision, observaciones_revision, es_turno, fecha_turno")
-      .eq("persona_id", person.id)
-      .eq("campana_id", id);
+    let docs = [];
+    try {
+      const { data, error } = await supabase
+        .from("documentos")
+        .select("id, tipo_documento, nombre_archivo, url_supabase, estado_revision, observaciones_revision, es_turno, fecha_turno")
+        .eq("persona_id", person.id)
+        .eq("campana_id", id);
+      if (error) throw error;
+      docs = data || [];
+    } catch (err: any) {
+      if (err.code === "42703" || (err.message && err.message.includes("es_turno"))) {
+        console.warn("es_turno/fecha_turno missing in public api docs query, falling back.");
+        const { data, error } = await supabase
+          .from("documentos")
+          .select("id, tipo_documento, nombre_archivo, url_supabase, estado_revision, observaciones_revision")
+          .eq("persona_id", person.id)
+          .eq("campana_id", id);
+        if (error) throw error;
+        docs = (data || []).map((d: any) => ({
+          ...d,
+          es_turno: false,
+          fecha_turno: null,
+        }));
+      } else {
+        throw err;
+      }
+    }
 
     return NextResponse.json({
       success: true,
