@@ -33,50 +33,53 @@ export default function ResponsableDetailClient({ id }: ResponsableDetailClientP
   const [responsable, setResponsable] = useState<any | null>(null);
   const [becarios, setBecarios] = useState<any[]>([]);
   const [monotributistas, setMonotributistas] = useState<any[]>([]);
+  const [subsecretarias, setSubsecretarias] = useState<any[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"becarios" | "monotributistas">("becarios");
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch responsible info
-      const { data: resp, error: respErr } = await supabase
-        .from("responsables")
-        .select(`
-          *,
-          subsecretarias(id, nombre),
-          areas(id, nombre)
-        `)
-        .eq("id", id)
-        .single();
+      // 1. Fetch everything in parallel
+      const [respRes, becsRes, monosRes, subsRes, arsRes] = await Promise.all([
+        supabase
+          .from("responsables")
+          .select(`
+            *,
+            subsecretarias(id, nombre),
+            areas(id, nombre)
+          `)
+          .eq("id", id)
+          .single(),
+        supabase
+          .from("becarios")
+          .select(`
+            *,
+            areas(id, nombre),
+            categorias_becas(id, numero_categoria)
+          `)
+          .eq("responsable_id", id)
+          .order("apellido_nombre", { ascending: true }),
+        supabase
+          .from("monotributistas")
+          .select(`
+            *,
+            areas(id, nombre),
+            categorias_monotributistas(id, letra, descripcion_categoria)
+          `)
+          .eq("responsable_id", id)
+          .order("apellido_nombre", { ascending: true }),
+        supabase.from("subsecretarias").select("id, nombre"),
+        supabase.from("areas").select("id, nombre")
+      ]);
 
-      if (respErr) throw respErr;
-      setResponsable(resp);
+      if (respRes.error) throw respRes.error;
 
-      // 2. Fetch assigned becarios
-      const { data: becs } = await supabase
-        .from("becarios")
-        .select(`
-          *,
-          areas(id, nombre),
-          categorias_becas(id, numero_categoria)
-        `)
-        .eq("responsable_id", id)
-        .order("apellido_nombre", { ascending: true });
-
-      setBecarios(becs || []);
-
-      // 3. Fetch assigned monotributistas
-      const { data: monos } = await supabase
-        .from("monotributistas")
-        .select(`
-          *,
-          areas(id, nombre),
-          categorias_monotributistas(id, letra, descripcion_categoria)
-        `)
-        .eq("responsable_id", id)
-        .order("apellido_nombre", { ascending: true });
-
-      setMonotributistas(monos || []);
+      setResponsable(respRes.data);
+      setBecarios(becsRes.data || []);
+      setMonotributistas(monosRes.data || []);
+      setSubsecretarias(subsRes.data || []);
+      setAreas(arsRes.data || []);
     } catch (err: any) {
       toast.error("Error al cargar detalles del responsable: " + err.message);
     } finally {
@@ -172,18 +175,74 @@ export default function ResponsableDetailClient({ id }: ResponsableDetailClientP
             <div className={styles.infoItem}>
               <Building size={16} className="text-blue" />
               <div>
-                <span className={styles.infoLabel}>Subsecretaría</span>
-                <span className={styles.infoValue}>
-                  {responsable.subsecretarias?.nombre || "No vinculada"}
-                </span>
+                <span className={styles.infoLabel}>Subsecretarías</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
+                  {(() => {
+                    const subIds = responsable.subsecretarias_ids && responsable.subsecretarias_ids.length > 0
+                      ? responsable.subsecretarias_ids
+                      : (responsable.subsecretaria_id ? [responsable.subsecretaria_id] : []);
+                    if (subIds.length === 0) {
+                      return <span className={styles.infoValue}>No vinculada</span>;
+                    }
+                    return subIds.map((subId: string) => {
+                      const name = subsecretarias.find((s) => s.id === subId)?.nombre || "Desconocida";
+                      return (
+                        <span
+                          key={subId}
+                          style={{
+                            display: "inline-block",
+                            padding: "4px 8px",
+                            borderRadius: "6px",
+                            background: "rgba(59, 130, 246, 0.1)",
+                            border: "1px solid rgba(59, 130, 246, 0.2)",
+                            color: "var(--accent-blue)",
+                            fontSize: "12px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {name}
+                        </span>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
             </div>
 
             <div className={styles.infoItem}>
               <Briefcase size={16} className="text-emerald" />
               <div>
-                <span className={styles.infoLabel}>Área Operativa</span>
-                <span className={styles.infoValue}>{responsable.areas?.nombre || "No vinculada"}</span>
+                <span className={styles.infoLabel}>Áreas Operativas</span>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
+                  {(() => {
+                    const areaIds = responsable.areas_ids && responsable.areas_ids.length > 0
+                      ? responsable.areas_ids
+                      : (responsable.area_id ? [responsable.area_id] : []);
+                    if (areaIds.length === 0) {
+                      return <span className={styles.infoValue}>No vinculada</span>;
+                    }
+                    return areaIds.map((areaId: string) => {
+                      const name = areas.find((a) => a.id === areaId)?.nombre || "Desconocida";
+                      return (
+                        <span
+                          key={areaId}
+                          style={{
+                            display: "inline-block",
+                            padding: "4px 8px",
+                            borderRadius: "6px",
+                            background: "rgba(16, 185, 129, 0.1)",
+                            border: "1px solid rgba(16, 185, 129, 0.2)",
+                            color: "var(--accent-emerald)",
+                            fontSize: "12px",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {name}
+                        </span>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
             </div>
 

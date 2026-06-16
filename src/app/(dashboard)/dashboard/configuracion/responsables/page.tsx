@@ -40,8 +40,8 @@ const formSchema = z.object({
   dni: z.string().regex(/^\d{7,8}$/, "DNI debe tener 7 u 8 dígitos numéricos"),
   telefono: z.string().or(z.literal("")).nullable().optional(),
   email: z.string().email("Email inválido").or(z.literal("")).nullable().optional(),
-  subsecretaria_id: z.string().uuid("Seleccione una subsecretaría").or(z.literal("")).nullable().optional(),
-  area_id: z.string().uuid("Seleccione un área").or(z.literal("")).nullable().optional(),
+  subsecretarias_ids: z.array(z.string().uuid()).min(1, "Seleccione al menos una subsecretaría"),
+  areas_ids: z.array(z.string().uuid()),
   cargo: z.string().or(z.literal("")).nullable().optional(),
   activo: z.boolean(),
 });
@@ -119,35 +119,35 @@ export default function ResponsablesConfigPage() {
       dni: "",
       telefono: "",
       email: "",
-      subsecretaria_id: "",
-      area_id: "",
+      subsecretarias_ids: [],
+      areas_ids: [],
       cargo: "",
       activo: true,
     },
   });
 
-  const selectedSub = watch("subsecretaria_id");
+  const selectedSubs = watch("subsecretarias_ids") || [];
 
-  // Filter Areas based on selected Subsecretaría in the form
+  // Filter Areas based on selected Subsecretarías in the form
   const filteredAreasForForm = useMemo(() => {
-    if (!selectedSub) return [];
-    return areas.filter((a) => a.subsecretaria_id === selectedSub);
-  }, [selectedSub, areas]);
+    if (selectedSubs.length === 0) return [];
+    return areas.filter((a) => selectedSubs.includes(a.subsecretaria_id));
+  }, [selectedSubs, areas]);
 
-  // Adjust area in form if subsecretaría changes and selected area doesn't belong to it
+  // Adjust areas in form if subsecretarías changes and selected area doesn't belong to any of them
   useEffect(() => {
-    if (selectedSub) {
-      const currentArea = watch("area_id");
-      if (currentArea) {
-        const belongs = areas.some((a) => a.id === currentArea && a.subsecretaria_id === selectedSub);
-        if (!belongs) {
-          setValue("area_id", "");
-        }
+    const currentAreas = watch("areas_ids") || [];
+    if (selectedSubs.length > 0 && currentAreas.length > 0) {
+      const validAreas = currentAreas.filter((areaId) =>
+        areas.some((a) => a.id === areaId && selectedSubs.includes(a.subsecretaria_id))
+      );
+      if (validAreas.length !== currentAreas.length) {
+        setValue("areas_ids", validAreas);
       }
-    } else {
-      setValue("area_id", "");
+    } else if (selectedSubs.length === 0 && currentAreas.length > 0) {
+      setValue("areas_ids", []);
     }
-  }, [selectedSub, areas, setValue, watch]);
+  }, [selectedSubs, areas, setValue, watch]);
 
   // Setup edit form
   const handleEditClick = (resp: any) => {
@@ -157,8 +157,12 @@ export default function ResponsablesConfigPage() {
       dni: resp.dni,
       telefono: resp.telefono || "",
       email: resp.email || "",
-      subsecretaria_id: resp.subsecretaria_id || "",
-      area_id: resp.area_id || "",
+      subsecretarias_ids: resp.subsecretarias_ids && resp.subsecretarias_ids.length > 0
+        ? resp.subsecretarias_ids
+        : (resp.subsecretaria_id ? [resp.subsecretaria_id] : []),
+      areas_ids: resp.areas_ids && resp.areas_ids.length > 0
+        ? resp.areas_ids
+        : (resp.area_id ? [resp.area_id] : []),
       cargo: resp.cargo || "",
       activo: resp.activo,
     });
@@ -170,17 +174,30 @@ export default function ResponsablesConfigPage() {
     // 1. Fetch active responsibles
     const { data: resps, error: respErr } = await supabase
       .from("responsables")
-      .select("id, subsecretaria_id, area_id")
+      .select("id, subsecretaria_id, area_id, subsecretarias_ids, areas_ids")
       .eq("activo", true);
     
     if (respErr) throw respErr;
     if (!resps) return;
 
     const findCorrectResp = (subId: string, areaId: string) => {
-      const areaResp = resps.find((r) => r.subsecretaria_id === subId && r.area_id === areaId);
+      // 1. Try to find a responsible who has this area in their areas_ids
+      const areaResp = resps.find((r) => r.areas_ids && r.areas_ids.includes(areaId));
       if (areaResp) return areaResp.id;
-      const subResp = resps.find((r) => r.subsecretaria_id === subId && !r.area_id);
-      return subResp ? subResp.id : null;
+
+      // 2. Fall back to finding a responsible who has this subsecretaria in their subsecretarias_ids and no areas assigned
+      const subResp = resps.find((r) => 
+        r.subsecretarias_ids && 
+        r.subsecretarias_ids.includes(subId) && 
+        (!r.areas_ids || r.areas_ids.length === 0)
+      );
+      if (subResp) return subResp.id;
+
+      // 3. Legacy compatibility
+      const legacyAreaResp = resps.find((r) => r.subsecretaria_id === subId && r.area_id === areaId);
+      if (legacyAreaResp) return legacyAreaResp.id;
+      const legacySubResp = resps.find((r) => r.subsecretaria_id === subId && !r.area_id);
+      return legacySubResp ? legacySubResp.id : null;
     };
 
     // 2. Fetch and sync active becarios
@@ -232,8 +249,10 @@ export default function ResponsablesConfigPage() {
         dni: data.dni,
         telefono: data.telefono || null,
         email: data.email || null,
-        subsecretaria_id: data.subsecretaria_id || null,
-        area_id: data.area_id || null,
+        subsecretaria_id: data.subsecretarias_ids && data.subsecretarias_ids.length > 0 ? data.subsecretarias_ids[0] : null,
+        area_id: data.areas_ids && data.areas_ids.length > 0 ? data.areas_ids[0] : null,
+        subsecretarias_ids: data.subsecretarias_ids || [],
+        areas_ids: data.areas_ids || [],
         cargo: data.cargo || null,
         activo: data.activo,
       };
@@ -275,8 +294,10 @@ export default function ResponsablesConfigPage() {
         dni: data.dni,
         telefono: data.telefono || null,
         email: data.email || null,
-        subsecretaria_id: data.subsecretaria_id || null,
-        area_id: data.area_id || null,
+        subsecretaria_id: data.subsecretarias_ids && data.subsecretarias_ids.length > 0 ? data.subsecretarias_ids[0] : null,
+        area_id: data.areas_ids && data.areas_ids.length > 0 ? data.areas_ids[0] : null,
+        subsecretarias_ids: data.subsecretarias_ids || [],
+        areas_ids: data.areas_ids || [],
         cargo: data.cargo || null,
         activo: data.activo,
       };
@@ -357,8 +378,15 @@ export default function ResponsablesConfigPage() {
       const dniMatch = r.dni.includes(searchTerm);
       const searchMatch = nameMatch || dniMatch;
 
-      const subMatch = !filterSub || r.subsecretaria_id === filterSub;
-      const areaMatch = !filterArea || r.area_id === filterArea;
+      const rSubIds = r.subsecretarias_ids && r.subsecretarias_ids.length > 0
+        ? r.subsecretarias_ids
+        : (r.subsecretaria_id ? [r.subsecretaria_id] : []);
+      const rAreaIds = r.areas_ids && r.areas_ids.length > 0
+        ? r.areas_ids
+        : (r.area_id ? [r.area_id] : []);
+
+      const subMatch = !filterSub || rSubIds.includes(filterSub);
+      const areaMatch = !filterArea || rAreaIds.includes(filterArea);
 
       let estadoMatch = true;
       if (filterEstado === "activo") estadoMatch = r.activo === true;
@@ -388,13 +416,45 @@ export default function ResponsablesConfigPage() {
       },
       {
         id: "subsecretaria",
-        header: "Subsecretaría",
-        accessorFn: (row) => row.subsecretarias?.nombre || "-",
+        header: "Subsecretarías",
+        cell: (info) => {
+          const resp = info.row.original;
+          const subIds = resp.subsecretarias_ids && resp.subsecretarias_ids.length > 0
+            ? resp.subsecretarias_ids
+            : (resp.subsecretaria_id ? [resp.subsecretaria_id] : []);
+          
+          if (subIds.length === 0) return <span className="text-muted">-</span>;
+          
+          const names = subIds.map((id: string) => subsecretarias.find((s) => s.id === id)?.nombre || "Desconocida");
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12.5px" }}>
+              {names.map((name: string, idx: number) => (
+                <span key={idx} style={{ opacity: 0.85 }}>{name}</span>
+              ))}
+            </div>
+          );
+        }
       },
       {
         id: "area",
-        header: "Área",
-        accessorFn: (row) => row.areas?.nombre || "-",
+        header: "Áreas Operativas",
+        cell: (info) => {
+          const resp = info.row.original;
+          const areaIds = resp.areas_ids && resp.areas_ids.length > 0
+            ? resp.areas_ids
+            : (resp.area_id ? [resp.area_id] : []);
+          
+          if (areaIds.length === 0) return <span className="text-muted">-</span>;
+          
+          const names = areaIds.map((id: string) => areas.find((a) => a.id === id)?.nombre || "Desconocida");
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12.5px" }}>
+              {names.map((name: string, idx: number) => (
+                <span key={idx} style={{ opacity: 0.75 }}>{name}</span>
+              ))}
+            </div>
+          );
+        }
       },
       {
         id: "contacto",
@@ -724,35 +784,94 @@ export default function ResponsablesConfigPage() {
             </div>
 
             <div className={styles.formGroup}>
-              <label>Subsecretaría Organizativa</label>
-              <select className="input-field" {...register("subsecretaria_id")}>
-                <option value="">Ninguna</option>
-                {subsecretarias.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombre}
-                  </option>
-                ))}
-              </select>
-              {errors.subsecretaria_id && (
-                <span className={styles.formError}>{errors.subsecretaria_id.message}</span>
+              <label>Subsecretarías Organizativas *</label>
+              <div style={{
+                maxHeight: "150px",
+                overflowY: "auto",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "8px",
+                padding: "10px",
+                background: "rgba(255, 255, 255, 0.02)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px"
+              }}>
+                {subsecretarias.map((s) => {
+                  const currentSubs = watch("subsecretarias_ids") || [];
+                  const isChecked = currentSubs.includes(s.id);
+                  return (
+                    <label key={s.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px" }}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...currentSubs, s.id]
+                            : currentSubs.filter((id: string) => id !== s.id);
+                          setValue("subsecretarias_ids", next, { shouldValidate: true });
+                        }}
+                        style={{ cursor: "pointer" }}
+                      />
+                      <span>{s.nombre}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {errors.subsecretarias_ids && (
+                <span className={styles.formError}>{errors.subsecretarias_ids.message}</span>
               )}
             </div>
 
             <div className={styles.formGroup}>
-              <label>Área Operativa</label>
-              <select
-                className="input-field"
-                disabled={!selectedSub}
-                {...register("area_id")}
-              >
-                <option value="">Ninguna</option>
-                {filteredAreasForForm.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.nombre}
-                  </option>
-                ))}
-              </select>
-              {errors.area_id && <span className={styles.formError}>{errors.area_id.message}</span>}
+              <label>Áreas Operativas</label>
+              <div style={{
+                maxHeight: "180px",
+                overflowY: "auto",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "8px",
+                padding: "10px",
+                background: "rgba(255, 255, 255, 0.02)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px"
+              }}>
+                {selectedSubs.length === 0 ? (
+                  <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)", textAlign: "center", padding: "10px" }}>
+                    Seleccione al menos una subsecretaría para ver sus áreas.
+                  </span>
+                ) : filteredAreasForForm.length === 0 ? (
+                  <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)", textAlign: "center", padding: "10px" }}>
+                    No hay áreas activas vinculadas a las subsecretarías seleccionadas.
+                  </span>
+                ) : (
+                  filteredAreasForForm.map((a) => {
+                    const currentAreas = watch("areas_ids") || [];
+                    const isChecked = currentAreas.includes(a.id);
+                    return (
+                      <label key={a.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px" }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...currentAreas, a.id]
+                              : currentAreas.filter((id: string) => id !== a.id);
+                            setValue("areas_ids", next, { shouldValidate: true });
+                          }}
+                          style={{ cursor: "pointer" }}
+                        />
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <span>{a.nombre}</span>
+                          <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>
+                            ({subsecretarias.find(s => s.id === a.subsecretaria_id)?.nombre || ""})
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              {errors.areas_ids && <span className={styles.formError}>{errors.areas_ids.message}</span>}
             </div>
 
             <div className={styles.formGroup} style={{ flexDirection: "row", gap: "10px", alignItems: "center", marginTop: "10px" }}>
@@ -848,35 +967,94 @@ export default function ResponsablesConfigPage() {
             </div>
 
             <div className={styles.formGroup}>
-              <label>Subsecretaría Organizativa</label>
-              <select className="input-field" {...register("subsecretaria_id")}>
-                <option value="">Ninguna</option>
-                {subsecretarias.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombre}
-                  </option>
-                ))}
-              </select>
-              {errors.subsecretaria_id && (
-                <span className={styles.formError}>{errors.subsecretaria_id.message}</span>
+              <label>Subsecretarías Organizativas *</label>
+              <div style={{
+                maxHeight: "150px",
+                overflowY: "auto",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "8px",
+                padding: "10px",
+                background: "rgba(255, 255, 255, 0.02)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px"
+              }}>
+                {subsecretarias.map((s) => {
+                  const currentSubs = watch("subsecretarias_ids") || [];
+                  const isChecked = currentSubs.includes(s.id);
+                  return (
+                    <label key={s.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px" }}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...currentSubs, s.id]
+                            : currentSubs.filter((id: string) => id !== s.id);
+                          setValue("subsecretarias_ids", next, { shouldValidate: true });
+                        }}
+                        style={{ cursor: "pointer" }}
+                      />
+                      <span>{s.nombre}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              {errors.subsecretarias_ids && (
+                <span className={styles.formError}>{errors.subsecretarias_ids.message}</span>
               )}
             </div>
 
             <div className={styles.formGroup}>
-              <label>Área Operativa</label>
-              <select
-                className="input-field"
-                disabled={!selectedSub}
-                {...register("area_id")}
-              >
-                <option value="">Ninguna</option>
-                {filteredAreasForForm.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.nombre}
-                  </option>
-                ))}
-              </select>
-              {errors.area_id && <span className={styles.formError}>{errors.area_id.message}</span>}
+              <label>Áreas Operativas</label>
+              <div style={{
+                maxHeight: "180px",
+                overflowY: "auto",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "8px",
+                padding: "10px",
+                background: "rgba(255, 255, 255, 0.02)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px"
+              }}>
+                {selectedSubs.length === 0 ? (
+                  <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)", textAlign: "center", padding: "10px" }}>
+                    Seleccione al menos una subsecretaría para ver sus áreas.
+                  </span>
+                ) : filteredAreasForForm.length === 0 ? (
+                  <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)", textAlign: "center", padding: "10px" }}>
+                    No hay áreas activas vinculadas a las subsecretarías seleccionadas.
+                  </span>
+                ) : (
+                  filteredAreasForForm.map((a) => {
+                    const currentAreas = watch("areas_ids") || [];
+                    const isChecked = currentAreas.includes(a.id);
+                    return (
+                      <label key={a.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px" }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...currentAreas, a.id]
+                              : currentAreas.filter((id: string) => id !== a.id);
+                            setValue("areas_ids", next, { shouldValidate: true });
+                          }}
+                          style={{ cursor: "pointer" }}
+                        />
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          <span>{a.nombre}</span>
+                          <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>
+                            ({subsecretarias.find(s => s.id === a.subsecretaria_id)?.nombre || ""})
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              {errors.areas_ids && <span className={styles.formError}>{errors.areas_ids.message}</span>}
             </div>
 
             <div className={styles.formGroup} style={{ flexDirection: "row", gap: "10px", alignItems: "center", marginTop: "10px" }}>
