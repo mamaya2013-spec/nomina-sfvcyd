@@ -126,6 +126,17 @@ export default function ResponsablesConfigPage() {
     },
   });
 
+  useEffect(() => {
+    if (Object.keys(errors).length > 0) {
+      console.log("Validation errors:", errors);
+      const firstKey = Object.keys(errors)[0];
+      const firstError = errors[firstKey as keyof typeof errors];
+      if (firstError?.message) {
+        toast.error(`Error de validación (${firstKey}): ${firstError.message}`);
+      }
+    }
+  }, [errors]);
+
   const selectedSubs = watch("subsecretarias_ids") || [];
 
   // Filter Areas based on selected Subsecretarías in the form
@@ -518,7 +529,7 @@ export default function ResponsablesConfigPage() {
         },
       },
     ],
-    []
+    [subsecretarias, areas]
   );
 
   const table = useReactTable({
