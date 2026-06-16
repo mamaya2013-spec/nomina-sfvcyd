@@ -137,6 +137,11 @@ export default function ResponsablesConfigPage() {
     }
   }, [errors]);
 
+  useEffect(() => {
+    register("subsecretarias_ids");
+    register("areas_ids");
+  }, [register]);
+
   const selectedSubs = watch("subsecretarias_ids") || [];
 
   // Filter Areas based on selected Subsecretarías in the form
@@ -344,6 +349,24 @@ export default function ResponsablesConfigPage() {
     } catch (err: any) {
       toast.error("Error al actualizar responsable: " + err.message);
     }
+  };
+
+  const onAddFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (Object.keys(errors).length > 0) {
+      const errList = Object.entries(errors).map(([key, val]) => `${key}: ${val?.message}`).join(", ");
+      toast.error(`No se pudo registrar: campos inválidos. ${errList}`);
+    }
+    handleSubmit(onAddSubmit)(e);
+  };
+
+  const onEditFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (Object.keys(errors).length > 0) {
+      const errList = Object.entries(errors).map(([key, val]) => `${key}: ${val?.message}`).join(", ");
+      toast.error(`No se pudo guardar: campos inválidos. ${errList}`);
+    }
+    handleSubmit(onEditSubmit)(e);
   };
 
   // Toggle active status
@@ -731,7 +754,7 @@ export default function ResponsablesConfigPage() {
         title="Registrar Nuevo Responsable"
         size="md"
       >
-        <form onSubmit={handleSubmit(onAddSubmit)} className={styles.drawerForm}>
+        <form onSubmit={onAddFormSubmit} className={styles.drawerForm}>
           <div className={styles.formSection}>
             <div className={styles.formGroup}>
               <label>Nombre Completo *</label>
@@ -914,7 +937,7 @@ export default function ResponsablesConfigPage() {
         title="Editar Datos de Responsable"
         size="md"
       >
-        <form onSubmit={handleSubmit(onEditSubmit)} className={styles.drawerForm}>
+        <form onSubmit={onEditFormSubmit} className={styles.drawerForm}>
           <div className={styles.formSection}>
             <div className={styles.formGroup}>
               <label>Nombre Completo *</label>
