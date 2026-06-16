@@ -43,14 +43,16 @@ import styles from "./monotributistas.module.css";
 import Link from "next/link";
 
 // 1. Zod Form Schema for Monotributista
+const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 const formSchema = z.object({
   apellido_nombre: z.string().min(3, "Mínimo 3 caracteres"),
   dni: z.string().regex(/^\d{7,8}$/, "DNI debe tener 7 u 8 dígitos numéricos"),
   cuit: z.string().regex(/^\d{11}$/, "CUIT/CUIL debe tener 11 dígitos numéricos"),
-  subsecretaria_id: z.string().uuid("Seleccione una subsecretaría"),
-  area_id: z.string().uuid("Seleccione un área"),
-  responsable_id: z.string().uuid().nullable().optional(),
-  categoria_mono_id: z.string().uuid("Seleccione una categoría"),
+  subsecretaria_id: z.string().regex(uuidRegex, "Seleccione una subsecretaría"),
+  area_id: z.string().regex(uuidRegex, "Seleccione un área"),
+  responsable_id: z.string().regex(uuidRegex, "Responsable inválido").or(z.literal("")).nullable().optional(),
+  categoria_mono_id: z.string().regex(uuidRegex, "Seleccione una categoría"),
   fecha_nacimiento: z.string().nullable().optional(),
   cbu: z.string().nullable().optional(),
   tarjeta_activa_nro: z.string().nullable().optional(),

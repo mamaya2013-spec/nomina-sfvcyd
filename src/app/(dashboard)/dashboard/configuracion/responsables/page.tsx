@@ -35,13 +35,15 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import styles from "./responsables.module.css";
 
 // Form Validation Schema
+const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 const formSchema = z.object({
   nombre_completo: z.string().min(3, "Mínimo 3 caracteres"),
   dni: z.string().regex(/^\d{7,8}$/, "DNI debe tener 7 u 8 dígitos numéricos"),
   telefono: z.string().or(z.literal("")).nullable().optional(),
   email: z.string().email("Email inválido").or(z.literal("")).nullable().optional(),
-  subsecretarias_ids: z.array(z.string().uuid()).min(1, "Seleccione al menos una subsecretaría"),
-  areas_ids: z.array(z.string().uuid()),
+  subsecretarias_ids: z.array(z.string().regex(uuidRegex, "UUID inválido")).min(1, "Seleccione al menos una subsecretaría"),
+  areas_ids: z.array(z.string().regex(uuidRegex, "UUID inválido")),
   cargo: z.string().or(z.literal("")).nullable().optional(),
   activo: z.boolean(),
 });
@@ -348,10 +350,35 @@ export default function ResponsablesConfigPage() {
     }
   };
 
+  const formatErrors = (errs: any): string => {
+    const messages: string[] = [];
+    const extract = (obj: any, path: string) => {
+      if (!obj) return;
+      if (obj.message) {
+        messages.push(`${path}: ${obj.message}`);
+        return;
+      }
+      if (Array.isArray(obj)) {
+        obj.forEach((child, index) => {
+          extract(child, `${path}[${index}]`);
+        });
+        return;
+      }
+      if (typeof obj === "object") {
+        Object.entries(obj).forEach(([key, val]) => {
+          extract(val, path ? `${path}.${key}` : key);
+        });
+      }
+    };
+    extract(errs, "");
+    return messages.join(", ");
+  };
+
   const onAddFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (Object.keys(errors).length > 0) {
-      const errList = Object.entries(errors).map(([key, val]) => `${key}: ${val?.message}`).join(", ");
+      console.log("Validation errors on add:", errors);
+      const errList = formatErrors(errors);
       toast.error(`No se pudo registrar: campos inválidos. ${errList}`);
     }
     handleSubmit(onAddSubmit)(e);
@@ -360,7 +387,8 @@ export default function ResponsablesConfigPage() {
   const onEditFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (Object.keys(errors).length > 0) {
-      const errList = Object.entries(errors).map(([key, val]) => `${key}: ${val?.message}`).join(", ");
+      console.log("Validation errors on edit:", errors);
+      const errList = formatErrors(errors);
       toast.error(`No se pudo guardar: campos inválidos. ${errList}`);
     }
     handleSubmit(onEditSubmit)(e);
