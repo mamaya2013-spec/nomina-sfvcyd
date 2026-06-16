@@ -163,3 +163,69 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || "Error al crear campaña." }, { status: 500 });
   }
 }
+
+export async function PATCH(req: NextRequest) {
+  const supabase = await createClient();
+
+  try {
+    const body = await req.json();
+    const { id, fecha_limite } = body;
+
+    if (!id || !fecha_limite) {
+      return NextResponse.json({ error: "Faltan parámetros obligatorios (id, fecha_limite)." }, { status: 400 });
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // 1. Fetch current campaign details to calculate new state and log differences
+    const { data: campaign, error: fetchErr } = await supabase
+      .from("campanas_documentacion")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !campaign) {
+      return NextResponse.json({ error: "Campaña no encontrada." }, { status: 404 });
+    }
+
+    // 2. Determine new state
+    // If the new date is in the future, and status is 'vencida', set to 'activa'
+    let newEstado = campaign.estado;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const newLimit = new Date(fecha_limite + "T00:00:00");
+    
+    if (newLimit >= today && campaign.estado === "vencida") {
+      newEstado = "activa";
+    }
+
+    // 3. Update Campaign
+    const { data: updatedCampaign, error: updateErr } = await supabase
+      .from("campanas_documentacion")
+      .update({
+        fecha_limite,
+        estado: newEstado,
+      })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    // 4. Audit Log
+    await supabase.from("audit_log").insert({
+      usuario_id: user?.id,
+      accion: "Extensión de Campaña de Documentación",
+      tabla_afectada: "campanas_documentacion",
+      registro_id: id,
+      datos_anteriores: { fecha_limite: campaign.fecha_limite, estado: campaign.estado },
+      datos_nuevos: { fecha_limite, estado: newEstado },
+    });
+
+    return NextResponse.json({ success: true, campaign: updatedCampaign });
+
+  } catch (err: any) {
+    console.error("Error in PATCH api/campanas:", err);
+    return NextResponse.json({ error: err.message || "Error al modificar la campaña." }, { status: 500 });
+  }
+}

@@ -175,6 +175,16 @@ export default function DocumentosDashboardPage() {
   const [isCampOpen, setIsCampOpen] = useState(false);
   const [savingCampaign, setSavingCampaign] = useState(false);
 
+  // Extend Campaign Drawer
+  const [isExtendOpen, setIsExtendOpen] = useState(false);
+  const [newDeadlineDate, setNewDeadlineDate] = useState("");
+
+  useEffect(() => {
+    if (selectedCampaign) {
+      setNewDeadlineDate(selectedCampaign.fecha_limite);
+    }
+  }, [selectedCampaign, isExtendOpen]);
+
   // Form setup for campaigns
   const {
     register,
@@ -795,25 +805,43 @@ export default function DocumentosDashboardPage() {
               <span>Volver a Campañas</span>
             </button>
 
-            <button
-              onClick={() => {
-                const url = `${window.location.origin}/publico/campanas/${selectedCampaign.id}`;
-                navigator.clipboard.writeText(url);
-                toast.success("¡Enlace del portal copiado al portapapeles!");
-              }}
-              className={styles.backBtn}
-              style={{
-                borderColor: "rgba(6, 182, 212, 0.3)",
-                color: "#06b6d4",
-                background: "rgba(6, 182, 212, 0.05)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px"
-              }}
-            >
-              <Link size={14} />
-              <span>Copiar Enlace Portal</span>
-            </button>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => setIsExtendOpen(true)}
+                className={styles.backBtn}
+                style={{
+                  borderColor: "rgba(245, 158, 11, 0.3)",
+                  color: "#f59e0b",
+                  background: "rgba(245, 158, 11, 0.05)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                <Calendar size={14} />
+                <span>Extender Tiempo</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/publico/campanas/${selectedCampaign.id}`;
+                  navigator.clipboard.writeText(url);
+                  toast.success("¡Enlace del portal copiado al portapapeles!");
+                }}
+                className={styles.backBtn}
+                style={{
+                  borderColor: "rgba(6, 182, 212, 0.3)",
+                  color: "#06b6d4",
+                  background: "rgba(6, 182, 212, 0.05)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                <Link size={14} />
+                <span>Copiar Enlace Portal</span>
+              </button>
+            </div>
           </div>
           
           <div className={styles.analyticsHeaderTitle}>
@@ -1355,6 +1383,40 @@ export default function DocumentosDashboardPage() {
       toast.error(err.message);
     } finally {
       setSavingCampaign(false);
+    }
+  };
+
+  const handleExtendSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCampaign || !newDeadlineDate) {
+      toast.error("La nueva fecha límite es obligatoria.");
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/campanas", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedCampaign.id,
+          fecha_limite: newDeadlineDate,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al extender campaña");
+
+      toast.success("Campaña extendida correctamente.");
+      setIsExtendOpen(false);
+      
+      // Update selectedCampaign in client state to reflect extended date immediately
+      setSelectedCampaign(data.campaign);
+      await loadCampaigns();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -1997,6 +2059,47 @@ export default function DocumentosDashboardPage() {
                 </>
               ) : (
                 <span>Lanzar Campaña</span>
+              )}
+            </button>
+          </div>
+        </form>
+      </Drawer>
+
+      {/* Modal/Drawer: Extend Campaign */}
+      <Drawer isOpen={isExtendOpen} onClose={() => setIsExtendOpen(false)} title="Extender Tiempo de Campaña" size="md">
+        <form onSubmit={handleExtendSubmit} style={{ display: "flex", flexDirection: "column", gap: "20px", padding: "12px 0" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <label style={{ fontWeight: "500", fontSize: "14px" }}>Nueva Fecha Límite *</label>
+            <input
+              type="date"
+              className="input-field"
+              value={newDeadlineDate}
+              onChange={(e) => setNewDeadlineDate(e.target.value)}
+              min={selectedCampaign ? selectedCampaign.fecha_inicio : undefined}
+              required
+            />
+            <p style={{ fontSize: "12.5px", color: "rgba(255, 255, 255, 0.5)", marginTop: "4px", lineHeight: "1.4" }}>
+              Selecciona la nueva fecha de finalización. Si la campaña estaba vencida y eliges una fecha futura, volverá a estar activa de forma automática.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "12px" }}>
+            <button
+              type="button"
+              onClick={() => setIsExtendOpen(false)}
+              className={styles.secondaryBtn}
+              disabled={actionLoading}
+            >
+              Cancelar
+            </button>
+            <button type="submit" className={styles.primaryBtn} disabled={actionLoading}>
+              {actionLoading ? (
+                <>
+                  <Loader2 className={styles.spin} size={14} />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <span>Confirmar Extensión</span>
               )}
             </button>
           </div>
