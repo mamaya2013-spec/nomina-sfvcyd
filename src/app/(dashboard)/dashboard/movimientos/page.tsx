@@ -29,6 +29,12 @@ import styles from "./movimientos.module.css";
 
 const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+const getLastDayOfPrevMonthStr = () => {
+  const d = new Date();
+  const lastDay = new Date(d.getFullYear(), d.getMonth(), 0);
+  return lastDay.toISOString().split("T")[0];
+};
+
 // Validation Schemas
 const altaSchema = z.object({
   tipo_persona: z.enum(["becario", "monotributista"]),
@@ -106,6 +112,7 @@ export default function MovimientosPage() {
   // Drawer States
   const [activeDrawer, setActiveDrawer] = useState<"alta" | "baja" | "modificacion" | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [altaFormTab, setAltaFormTab] = useState<"personal" | "asignacion" | "contacto">("personal");
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState("");
@@ -167,7 +174,7 @@ export default function MovimientosPage() {
     defaultValues: {
       tipo_persona: "becario",
       persona_id: "",
-      fecha_baja: new Date().toISOString().split("T")[0],
+      fecha_baja: getLastDayOfPrevMonthStr(),
       motivo_baja: "",
       solicitado_por: "",
     }
@@ -455,6 +462,12 @@ export default function MovimientosPage() {
     }
   };
 
+  const closeAltaDrawer = () => {
+    setActiveDrawer(null);
+    altaForm.reset();
+    setAltaFormTab("personal");
+  };
+
   // Submit Alta Action
   const handleAltaSubmit = async (data: AltaValues) => {
     setSubmitLoading(true);
@@ -545,8 +558,7 @@ export default function MovimientosPage() {
       });
 
       toast.success(`${isBecario ? "Becario" : "Monotributista"} registrado exitosamente.`);
-      setActiveDrawer(null);
-      altaForm.reset();
+      closeAltaDrawer();
       fetchMovementsData();
       fetchCatalogs();
     } catch (err: any) {
@@ -574,7 +586,14 @@ export default function MovimientosPage() {
 
       if (updErr) throw updErr;
 
-      const fechaBaja = new Date(data.fecha_baja + "T12:00:00");
+      const date = new Date(data.fecha_baja + "T12:00:00");
+      let movMes = date.getMonth() + 1 + 1; // Month following the fecha_baja
+      let movAnio = date.getFullYear();
+      if (movMes > 12) {
+        movMes = 1;
+        movAnio += 1;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
 
       // Log in audit log
@@ -591,8 +610,8 @@ export default function MovimientosPage() {
         tipo_persona: data.tipo_persona,
         persona_id: data.persona_id,
         tipo_movimiento: "baja",
-        anio: fechaBaja.getFullYear(),
-        mes: fechaBaja.getMonth() + 1,
+        anio: movAnio,
+        mes: movMes,
         descripcion: `Baja procesada. Motivo: ${data.motivo_baja}. Solicitado por: ${data.solicitado_por}`,
         datos_anteriores: { estado: "Activo" },
         datos_nuevos: { estado: "Baja", fecha_baja: data.fecha_baja, motivo_baja: data.motivo_baja },
@@ -1213,166 +1232,267 @@ export default function MovimientosPage() {
       {/* DRAWER: REGISTRAR ALTA */}
       <Drawer
         isOpen={activeDrawer === "alta"}
-        onClose={() => {
-          setActiveDrawer(null);
-          altaForm.reset();
-        }}
+        onClose={closeAltaDrawer}
         title="Registrar Alta de Personal"
-        size="md"
+        size="lg"
       >
+        <div className={styles.drawerTabs}>
+          <button
+            type="button"
+            className={`${styles.tabBtn} ${altaFormTab === "personal" ? styles.activeTab : ""}`}
+            onClick={() => setAltaFormTab("personal")}
+          >
+            Datos Personales
+          </button>
+          <button
+            type="button"
+            className={`${styles.tabBtn} ${altaFormTab === "asignacion" ? styles.activeTab : ""}`}
+            onClick={() => setAltaFormTab("asignacion")}
+          >
+            Asignación y Monto
+          </button>
+          <button
+            type="button"
+            className={`${styles.tabBtn} ${altaFormTab === "contacto" ? styles.activeTab : ""}`}
+            onClick={() => setAltaFormTab("contacto")}
+          >
+            Contacto y Domicilio
+          </button>
+        </div>
+
         <form onSubmit={altaForm.handleSubmit(handleAltaSubmit)} className={styles.drawerForm}>
-          <div className={styles.formSection}>
-            <div className={styles.formRow}>
-              <div className={styles.formGroup}>
-                <label>Tipo de Persona *</label>
-                <select className="input-field" {...altaForm.register("tipo_persona")}>
-                  <option value="becario">Becario</option>
-                  <option value="monotributista">Monotributista</option>
-                </select>
+          {altaFormTab === "personal" && (
+            <div className={styles.formSection}>
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Tipo de Persona *</label>
+                  <select className="input-field" {...altaForm.register("tipo_persona")}>
+                    <option value="becario">Becario</option>
+                    <option value="monotributista">Monotributista</option>
+                  </select>
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Solicitado por *</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Ej. Juan Pérez (Secretario)"
+                    {...altaForm.register("solicitado_por")}
+                  />
+                  {altaForm.formState.errors.solicitado_por && (
+                    <span className={styles.formError}>{altaForm.formState.errors.solicitado_por.message}</span>
+                  )}
+                </div>
               </div>
+
               <div className={styles.formGroup}>
-                <label>Solicitado por *</label>
+                <label>Apellido y Nombre *</label>
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="Ej. Juan Pérez (Secretario)"
-                  {...altaForm.register("solicitado_por")}
+                  placeholder="Apellido Nombre"
+                  {...altaForm.register("apellido_nombre")}
                 />
-                {altaForm.formState.errors.solicitado_por && (
-                  <span className={styles.formError}>{altaForm.formState.errors.solicitado_por.message}</span>
+                {altaForm.formState.errors.apellido_nombre && (
+                  <span className={styles.formError}>{altaForm.formState.errors.apellido_nombre.message}</span>
                 )}
               </div>
-            </div>
 
-            <div className={styles.formGroup}>
-              <label>Apellido y Nombre *</label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Apellido Nombre"
-                {...altaForm.register("apellido_nombre")}
-              />
-              {altaForm.formState.errors.apellido_nombre && (
-                <span className={styles.formError}>{altaForm.formState.errors.apellido_nombre.message}</span>
-              )}
-            </div>
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>DNI *</label>
+                  <input
+                    type="text"
+                    className="input-field mono"
+                    placeholder="8 dígitos"
+                    {...altaForm.register("dni")}
+                  />
+                  {altaForm.formState.errors.dni && (
+                    <span className={styles.formError}>{altaForm.formState.errors.dni.message}</span>
+                  )}
+                </div>
+                <div className={styles.formGroup}>
+                  <label>CUIT/CUIL *</label>
+                  <input
+                    type="text"
+                    className="input-field mono"
+                    placeholder="11 dígitos"
+                    {...altaForm.register("cuit")}
+                  />
+                  {altaForm.formState.errors.cuit && (
+                    <span className={styles.formError}>{altaForm.formState.errors.cuit.message}</span>
+                  )}
+                </div>
+              </div>
 
-            <div className={styles.formRow}>
-              <div className={styles.formGroup}>
-                <label>DNI *</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="8 dígitos"
-                  {...altaForm.register("dni")}
-                />
-                {altaForm.formState.errors.dni && (
-                  <span className={styles.formError}>{altaForm.formState.errors.dni.message}</span>
-                )}
-              </div>
-              <div className={styles.formGroup}>
-                <label>CUIT/CUIL *</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="11 dígitos"
-                  {...altaForm.register("cuit")}
-                />
-                {altaForm.formState.errors.cuit && (
-                  <span className={styles.formError}>{altaForm.formState.errors.cuit.message}</span>
-                )}
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Fecha de Nacimiento</label>
+                  <input type="date" className="input-field" {...altaForm.register("fecha_nacimiento")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Nacionalidad</label>
+                  <input type="text" className="input-field" placeholder="Argentina" {...altaForm.register("nacionalidad")} />
+                </div>
               </div>
             </div>
+          )}
 
-            <div className={styles.formRow}>
-              <div className={styles.formGroup}>
-                <label>Subsecretaría *</label>
-                <select className="input-field" {...altaForm.register("subsecretaria_id")}>
-                  <option value="">Seleccione una...</option>
-                  {subsecretarias.map((s) => (
-                    <option key={s.id} value={s.id}>{s.nombre}</option>
-                  ))}
-                </select>
-                {altaForm.formState.errors.subsecretaria_id && (
-                  <span className={styles.formError}>{altaForm.formState.errors.subsecretaria_id.message}</span>
-                )}
+          {altaFormTab === "asignacion" && (
+            <div className={styles.formSection}>
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Subsecretaría *</label>
+                  <select className="input-field" {...altaForm.register("subsecretaria_id")}>
+                    <option value="">Seleccione una...</option>
+                    {subsecretarias.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nombre}</option>
+                    ))}
+                  </select>
+                  {altaForm.formState.errors.subsecretaria_id && (
+                    <span className={styles.formError}>{altaForm.formState.errors.subsecretaria_id.message}</span>
+                  )}
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Área *</label>
+                  <select className="input-field" {...altaForm.register("area_id")} disabled={!selectedAltaSub}>
+                    <option value="">Seleccione una...</option>
+                    {filteredAreasForAlta.map((a) => (
+                      <option key={a.id} value={a.id}>{a.nombre}</option>
+                    ))}
+                  </select>
+                  {altaForm.formState.errors.area_id && (
+                    <span className={styles.formError}>{altaForm.formState.errors.area_id.message}</span>
+                  )}
+                </div>
               </div>
-              <div className={styles.formGroup}>
-                <label>Área *</label>
-                <select className="input-field" {...altaForm.register("area_id")} disabled={!selectedAltaSub}>
-                  <option value="">Seleccione una...</option>
-                  {filteredAreasForAlta.map((a) => (
-                    <option key={a.id} value={a.id}>{a.nombre}</option>
-                  ))}
-                </select>
-                {altaForm.formState.errors.area_id && (
-                  <span className={styles.formError}>{altaForm.formState.errors.area_id.message}</span>
-                )}
-              </div>
-            </div>
 
-            <div className={styles.formRow}>
-              <div className={styles.formGroup}>
-                <label>Responsable</label>
-                <select className="input-field" {...altaForm.register("responsable_id")}>
-                  <option value="">Seleccione uno...</option>
-                  {responsables.map((r) => (
-                    <option key={r.id} value={r.id}>{r.nombre_completo}</option>
-                  ))}
-                </select>
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Responsable</label>
+                  <select className="input-field" {...altaForm.register("responsable_id")}>
+                    <option value="">Seleccione uno...</option>
+                    {responsables.map((r) => (
+                      <option key={r.id} value={r.id}>{r.nombre_completo}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Categoría *</label>
+                  <select className="input-field" {...altaForm.register("categoria_id")}>
+                    <option value="">Seleccione una...</option>
+                    {dynamicCategoriesForAlta.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {selectedAltaTipo === "becario"
+                          ? `Cat ${c.numero_categoria} ($${Number(c.monto).toLocaleString("es-AR")})`
+                          : `Letra ${c.letra} ($${Number(c.monto).toLocaleString("es-AR")})`}
+                      </option>
+                    ))}
+                  </select>
+                  {altaForm.formState.errors.categoria_id && (
+                    <span className={styles.formError}>{altaForm.formState.errors.categoria_id.message}</span>
+                  )}
+                </div>
               </div>
-              <div className={styles.formGroup}>
-                <label>Categoría *</label>
-                <select className="input-field" {...altaForm.register("categoria_id")}>
-                  <option value="">Seleccione una...</option>
-                  {dynamicCategoriesForAlta.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {selectedAltaTipo === "becario"
-                        ? `Cat ${c.numero_categoria} ($${Number(c.monto).toLocaleString("es-AR")})`
-                        : `Letra ${c.letra} ($${Number(c.monto).toLocaleString("es-AR")})`}
-                    </option>
-                  ))}
-                </select>
-                {altaForm.formState.errors.categoria_id && (
-                  <span className={styles.formError}>{altaForm.formState.errors.categoria_id.message}</span>
-                )}
-              </div>
-            </div>
 
-            <div className={styles.formRow}>
-              <div className={styles.formGroup}>
-                <label>Fecha de Alta *</label>
-                <input type="date" className="input-field" {...altaForm.register("fecha_alta")} />
-              </div>
-              <div className={styles.formGroup}>
-                <label>CBU</label>
-                <input type="text" className="input-field" placeholder="22 dígitos" {...altaForm.register("cbu")} />
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Fecha de Alta *</label>
+                  <input type="date" className="input-field" {...altaForm.register("fecha_alta")} />
+                </div>
               </div>
             </div>
+          )}
 
-            <div className={styles.formRow}>
-              <div className={styles.formGroup}>
-                <label>Teléfono</label>
-                <input type="text" className="input-field" placeholder="Ej. 351..." {...altaForm.register("telefono")} />
+          {altaFormTab === "contacto" && (
+            <div className={styles.formSection}>
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Teléfono de Contacto</label>
+                  <input type="text" className="input-field" placeholder="Ej. 351..." {...altaForm.register("telefono")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Correo Electrónico</label>
+                  <input type="text" className="input-field" placeholder="mail@example.com" {...altaForm.register("email")} />
+                  {altaForm.formState.errors.email && (
+                    <span className={styles.formError}>{altaForm.formState.errors.email.message}</span>
+                  )}
+                </div>
               </div>
-              <div className={styles.formGroup}>
-                <label>Email</label>
-                <input type="text" className="input-field" placeholder="mail@example.com" {...altaForm.register("email")} />
-                {altaForm.formState.errors.email && (
-                  <span className={styles.formError}>{altaForm.formState.errors.email.message}</span>
-                )}
+
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>CBU Bancario</label>
+                  <input type="text" className="input-field mono" placeholder="22 dígitos" {...altaForm.register("cbu")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Nro Tarjeta Activa</label>
+                  <input type="text" className="input-field mono" placeholder="16 dígitos" {...altaForm.register("tarjeta_activa_nro")} />
+                </div>
+              </div>
+
+              <h3 className={styles.formSubtitle} style={{ fontSize: "14px", fontWeight: "600", borderBottom: "1px solid rgba(255, 255, 255, 0.08)", paddingBottom: "6px", marginTop: "10px" }}>Domicilio</h3>
+
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Provincia</label>
+                  <input type="text" className="input-field" placeholder="Catamarca" {...altaForm.register("provincia")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Departamento</label>
+                  <input type="text" className="input-field" placeholder="Capital" {...altaForm.register("departamento")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Localidad</label>
+                  <input type="text" className="input-field" placeholder="San Fernando del Valle" {...altaForm.register("localidad")} />
+                </div>
+                <div className={styles.formGroup} style={{ flex: 0.5 }}>
+                  <label>C.P.</label>
+                  <input type="text" className="input-field mono" placeholder="4700" {...altaForm.register("codigo_postal")} />
+                </div>
+              </div>
+
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Barrio</label>
+                  <input type="text" className="input-field" placeholder="Centro" {...altaForm.register("barrio")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Calle</label>
+                  <input type="text" className="input-field" placeholder="Sarmiento" {...altaForm.register("calle")} />
+                </div>
+                <div className={styles.formGroup} style={{ flex: 0.5 }}>
+                  <label>Nro</label>
+                  <input type="text" className="input-field mono" placeholder="123" {...altaForm.register("nro")} />
+                </div>
+              </div>
+
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Piso</label>
+                  <input type="text" className="input-field mono" placeholder="1" {...altaForm.register("piso")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Depto</label>
+                  <input type="text" className="input-field mono" placeholder="A" {...altaForm.register("depto")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Lote</label>
+                  <input type="text" className="input-field mono" placeholder="12" {...altaForm.register("lote")} />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Manzana</label>
+                  <input type="text" className="input-field mono" placeholder="B" {...altaForm.register("manzana")} />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className={styles.formActions}>
             <button
               type="button"
               className="input-field"
-              onClick={() => {
-                setActiveDrawer(null);
-                altaForm.reset();
-              }}
+              onClick={closeAltaDrawer}
               disabled={submitLoading}
             >
               Cancelar
