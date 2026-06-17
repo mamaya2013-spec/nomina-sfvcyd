@@ -14,12 +14,73 @@ import {
   Trash2,
   TrendingUp,
   RefreshCw,
-  Info
+  Info,
+  Plus,
+  ArrowRightLeft
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useSemester } from "@/lib/contexts/SemesterContext";
 import { toast, Toaster } from "sonner";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import Drawer from "@/components/ui/Drawer";
 import styles from "./movimientos.module.css";
+
+const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+// Validation Schemas
+const altaSchema = z.object({
+  tipo_persona: z.enum(["becario", "monotributista"]),
+  apellido_nombre: z.string().min(3, "Mínimo 3 caracteres"),
+  dni: z.string().regex(/^\d{7,8}$/, "DNI debe tener 7 u 8 dígitos numéricos"),
+  cuit: z.string().regex(/^\d{11}$/, "CUIT/CUIL debe tener 11 dígitos numéricos"),
+  subsecretaria_id: z.string().regex(uuidRegex, "Seleccione una subsecretaría"),
+  area_id: z.string().regex(uuidRegex, "Seleccione un área"),
+  responsable_id: z.string().regex(uuidRegex, "Responsable inválido").or(z.literal("")).nullable().optional(),
+  categoria_id: z.string().regex(uuidRegex, "Seleccione una categoría"),
+  fecha_alta: z.string().min(1, "Fecha de alta requerida"),
+  solicitado_por: z.string().min(2, "Especifique quién solicitó el alta"),
+  cbu: z.string().or(z.literal("")).nullable().optional(),
+  tarjeta_activa_nro: z.string().or(z.literal("")).nullable().optional(),
+  telefono: z.string().or(z.literal("")).nullable().optional(),
+  email: z.string().email("Email inválido").or(z.literal("")).nullable().optional(),
+  nacionalidad: z.string().or(z.literal("")).nullable().optional(),
+  codigo_postal: z.string().or(z.literal("")).nullable().optional(),
+  provincia: z.string().or(z.literal("")).nullable().optional(),
+  departamento: z.string().or(z.literal("")).nullable().optional(),
+  localidad: z.string().or(z.literal("")).nullable().optional(),
+  barrio: z.string().or(z.literal("")).nullable().optional(),
+  calle: z.string().or(z.literal("")).nullable().optional(),
+  nro: z.string().or(z.literal("")).nullable().optional(),
+  piso: z.string().or(z.literal("")).nullable().optional(),
+  depto: z.string().or(z.literal("")).nullable().optional(),
+  lote: z.string().or(z.literal("")).nullable().optional(),
+  manzana: z.string().or(z.literal("")).nullable().optional(),
+  fecha_nacimiento: z.string().or(z.literal("")).nullable().optional(),
+});
+
+const bajaSchema = z.object({
+  tipo_persona: z.enum(["becario", "monotributista"]),
+  persona_id: z.string().regex(uuidRegex, "Seleccione una persona"),
+  fecha_baja: z.string().min(1, "Fecha de baja requerida"),
+  motivo_baja: z.string().min(3, "El motivo de baja es obligatorio"),
+  solicitado_por: z.string().min(2, "Especifique quién solicitó la baja"),
+});
+
+const modificacionSchema = z.object({
+  tipo_persona: z.enum(["becario", "monotributista"]),
+  persona_id: z.string().regex(uuidRegex, "Seleccione una persona"),
+  categoria_id: z.string().regex(uuidRegex, "Seleccione la nueva categoría"),
+  mes: z.number().min(1).max(12),
+  anio: z.number().min(2020).max(2100),
+  solicitado_por: z.string().min(2, "Especifique quién solicitó la modificación"),
+  observaciones: z.string().or(z.literal("")).nullable().optional(),
+});
+
+type AltaValues = z.infer<typeof altaSchema>;
+type BajaValues = z.infer<typeof bajaSchema>;
+type ModificacionValues = z.infer<typeof modificacionSchema>;
 
 export default function MovimientosPage() {
   const supabase = createClient();
@@ -30,6 +91,21 @@ export default function MovimientosPage() {
   const [peopleMap, setPeopleMap] = useState<Record<string, { nombre: string; dni?: string }>>({});
   const [usersMap, setUsersMap] = useState<Record<string, { nombre: string; email: string }>>({});
   const [loading, setLoading] = useState(true);
+
+  // Core catalogs for forms
+  const [subsecretarias, setSubsecretarias] = useState<any[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
+  const [responsables, setResponsables] = useState<any[]>([]);
+  const [categoriasBecas, setCategoriasBecas] = useState<any[]>([]);
+  const [categoriasMonos, setCategoriasMonos] = useState<any[]>([]);
+  const [activePeople, setActivePeople] = useState<any[]>([]);
+
+  // Search filter for dropdowns
+  const [dropdownSearch, setDropdownSearch] = useState("");
+
+  // Drawer States
+  const [activeDrawer, setActiveDrawer] = useState<"alta" | "baja" | "modificacion" | null>(null);
+  const [submitLoading, setSubmitLoading] = useState(false);
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState("");
@@ -51,6 +127,149 @@ export default function MovimientosPage() {
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  // React Hook Forms setup
+  const altaForm = useForm<AltaValues>({
+    resolver: zodResolver(altaSchema),
+    defaultValues: {
+      tipo_persona: "becario",
+      apellido_nombre: "",
+      dni: "",
+      cuit: "",
+      subsecretaria_id: "",
+      area_id: "",
+      responsable_id: "",
+      categoria_id: "",
+      fecha_alta: new Date().toISOString().split("T")[0],
+      solicitado_por: "",
+      cbu: "",
+      tarjeta_activa_nro: "",
+      telefono: "",
+      email: "",
+      nacionalidad: "",
+      codigo_postal: "",
+      provincia: "",
+      departamento: "",
+      localidad: "",
+      barrio: "",
+      calle: "",
+      nro: "",
+      piso: "",
+      depto: "",
+      lote: "",
+      manzana: "",
+      fecha_nacimiento: "",
+    }
+  });
+
+  const bajaForm = useForm<BajaValues>({
+    resolver: zodResolver(bajaSchema),
+    defaultValues: {
+      tipo_persona: "becario",
+      persona_id: "",
+      fecha_baja: new Date().toISOString().split("T")[0],
+      motivo_baja: "",
+      solicitado_por: "",
+    }
+  });
+
+  const modForm = useForm<ModificacionValues>({
+    resolver: zodResolver(modificacionSchema),
+    defaultValues: {
+      tipo_persona: "becario",
+      persona_id: "",
+      categoria_id: "",
+      mes: new Date().getMonth() + 1,
+      anio: new Date().getFullYear(),
+      solicitado_por: "",
+      observaciones: "",
+    }
+  });
+
+  // Watchers to filter areas/categories
+  const selectedAltaTipo = altaForm.watch("tipo_persona");
+  const selectedAltaSub = altaForm.watch("subsecretaria_id");
+  const selectedBajaTipo = bajaForm.watch("tipo_persona");
+  const selectedModTipo = modForm.watch("tipo_persona");
+
+  // Dynamic area list based on selected subsecretaria in Alta
+  const filteredAreasForAlta = useMemo(() => {
+    if (!selectedAltaSub) return [];
+    return areas.filter((a) => a.subsecretaria_id === selectedAltaSub);
+  }, [selectedAltaSub, areas]);
+
+  // Dynamic categories list based on type of person in Alta
+  const dynamicCategoriesForAlta = useMemo(() => {
+    return selectedAltaTipo === "becario" ? categoriasBecas : categoriasMonos;
+  }, [selectedAltaTipo, categoriasBecas, categoriasMonos]);
+
+  // Dynamic categories list for Modificación
+  const dynamicCategoriesForMod = useMemo(() => {
+    return selectedModTipo === "becario" ? categoriasBecas : categoriasMonos;
+  }, [selectedModTipo, categoriasBecas, categoriasMonos]);
+
+  // Filtered active people based on chosen type in Baja or Modificación
+  const filteredActivePeople = useMemo(() => {
+    const type = activeDrawer === "baja" ? selectedBajaTipo : selectedModTipo;
+    const people = activePeople.filter((p) => p.tipo === type);
+    if (!dropdownSearch.trim()) return people;
+    const term = dropdownSearch.toLowerCase();
+    return people.filter(
+      (p) =>
+        p.nombre.toLowerCase().includes(term) ||
+        p.dni.includes(term)
+    );
+  }, [activePeople, selectedBajaTipo, selectedModTipo, activeDrawer, dropdownSearch]);
+
+  // Fetch core catalogs (areas, subsecretarias, categories)
+  const fetchCatalogs = async () => {
+    if (!selectedSemester) return;
+    try {
+      const { data: subs } = await supabase.from("subsecretarias").select("*").eq("activa", true).order("orden");
+      const { data: ars } = await supabase.from("areas").select("*").eq("activa", true).order("orden");
+      const { data: resps } = await supabase.from("responsables").select("*").eq("activo", true).order("nombre_completo");
+      const { data: cb } = await supabase.from("categorias_becas").select("*").eq("semestre_id", selectedSemester.id).order("numero_categoria");
+      const { data: cm } = await supabase.from("categorias_monotributistas").select("*").eq("semestre_id", selectedSemester.id).order("letra");
+
+      setSubsecretarias(subs || []);
+      setAreas(ars || []);
+      setResponsables(resps || []);
+      setCategoriasBecas(cb || []);
+      setCategoriasMonos(cm || []);
+
+      // Fetch active people
+      const { data: activeBecs } = await supabase
+        .from("becarios")
+        .select("id, apellido_nombre, dni, subsecretaria_id, area_id, responsable_id, categoria_beca_id, importe_mensual_beca, importe_tarjeta_activa, importe_total")
+        .eq("estado", "Activo");
+
+      const { data: activeMonos } = await supabase
+        .from("monotributistas")
+        .select("id, apellido_nombre, dni, subsecretaria_id, area_id, responsable_id, categoria_mono_id, importe_tarjeta_activa, importe_total")
+        .eq("estado", "Activo");
+
+      const peopleList = [
+        ...(activeBecs || []).map((b) => ({
+          id: b.id,
+          nombre: b.apellido_nombre,
+          dni: b.dni,
+          tipo: "becario",
+          info: b
+        })),
+        ...(activeMonos || []).map((m) => ({
+          id: m.id,
+          nombre: m.apellido_nombre,
+          dni: m.dni,
+          tipo: "monotributista",
+          info: m
+        }))
+      ].sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+      setActivePeople(peopleList);
+    } catch (err: any) {
+      console.error("Error loading catalogs:", err);
+    }
+  };
 
   const fetchMovementsData = async () => {
     if (!selectedYear) return;
@@ -131,6 +350,7 @@ export default function MovimientosPage() {
       setSelectedYear(selectedSemester.anio);
       setSelectedSemesterNum(selectedSemester.numero_semestre);
       setSelectedMonth(selectedSemester.numero_semestre === 1 ? 1 : 7);
+      fetchCatalogs();
     }
   }, [selectedSemester]);
 
@@ -141,7 +361,23 @@ export default function MovimientosPage() {
     }
   }, [selectedYear]);
 
-  // 1. Filter by period (Todos, Semester, or Month)
+  // Adjust categories in forms when types of person change
+  useEffect(() => {
+    altaForm.setValue("categoria_id", "");
+  }, [selectedAltaTipo]);
+
+  useEffect(() => {
+    bajaForm.setValue("persona_id", "");
+    setDropdownSearch("");
+  }, [selectedBajaTipo, activeDrawer]);
+
+  useEffect(() => {
+    modForm.setValue("persona_id", "");
+    modForm.setValue("categoria_id", "");
+    setDropdownSearch("");
+  }, [selectedModTipo, activeDrawer]);
+
+  // Period filter logic
   const periodFilteredMovements = useMemo(() => {
     return movements.filter((m) => {
       if (periodType === "todos") {
@@ -173,31 +409,30 @@ export default function MovimientosPage() {
     return { total, altas, bajas, cambios };
   }, [periodFilteredMovements]);
 
-  // Filtering Logic (search and badge filters)
+  // Filtering Logic
   const filteredMovements = useMemo(() => {
     return periodFilteredMovements.filter((m) => {
-      // 1. Filter by person type
       if (filterPersona !== "all" && m.tipo_persona !== filterPersona) {
         return false;
       }
 
-      // 2. Filter by movement type
       if (filterMovimiento !== "all" && m.tipo_movimiento !== filterMovimiento) {
         return false;
       }
 
-      // 3. Search term (person name, DNI, or description)
       if (searchTerm.trim() !== "") {
         const term = searchTerm.toLowerCase();
         const person = peopleMap[m.persona_id];
         const personName = person?.nombre?.toLowerCase() || "";
         const personDni = person?.dni || "";
         const description = m.descripcion?.toLowerCase() || "";
+        const solicitado = m.solicitado_por?.toLowerCase() || "";
 
         return (
           personName.includes(term) ||
           personDni.includes(term) ||
-          description.includes(term)
+          description.includes(term) ||
+          solicitado.includes(term)
         );
       }
 
@@ -208,7 +443,7 @@ export default function MovimientosPage() {
   // Pagination Logic
   const totalItems = filteredMovements.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-  
+
   const paginatedMovements = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredMovements.slice(startIndex, startIndex + itemsPerPage);
@@ -217,6 +452,253 @@ export default function MovimientosPage() {
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
+    }
+  };
+
+  // Submit Alta Action
+  const handleAltaSubmit = async (data: AltaValues) => {
+    setSubmitLoading(true);
+    try {
+      const isBecario = data.tipo_persona === "becario";
+      const targetTable = isBecario ? "becarios" : "monotributistas";
+      const catList = isBecario ? categoriasBecas : categoriasMonos;
+      const selectedCategory = catList.find((c) => c.id === data.categoria_id);
+
+      if (!selectedCategory) {
+        throw new Error("Categoría no encontrada");
+      }
+
+      const fechaAlta = new Date(data.fecha_alta + "T12:00:00");
+      const altaMes = fechaAlta.getMonth() + 1;
+      const altaAnio = fechaAlta.getFullYear();
+
+      // Setup payload based on person type
+      let payload: Record<string, any> = {
+        apellido_nombre: data.apellido_nombre,
+        dni: data.dni,
+        cuit: data.cuit,
+        subsecretaria_id: data.subsecretaria_id,
+        area_id: data.area_id,
+        responsable_id: data.responsable_id || null,
+        fecha_alta: data.fecha_alta,
+        cbu: data.cbu || null,
+        tarjeta_activa_nro: data.tarjeta_activa_nro || null,
+        telefono: data.telefono || null,
+        email: data.email || null,
+        nacionalidad: data.nacionalidad || null,
+        codigo_postal: data.codigo_postal || null,
+        provincia: data.provincia || null,
+        departamento: data.departamento || null,
+        localidad: data.localidad || null,
+        barrio: data.barrio || null,
+        calle: data.calle || null,
+        nro: data.nro || null,
+        piso: data.piso || null,
+        depto: data.depto || null,
+        lote: data.lote || null,
+        manzana: data.manzana || null,
+        fecha_nacimiento: data.fecha_nacimiento || null,
+        estado: "Activo"
+      };
+
+      if (isBecario) {
+        payload.categoria_beca_id = data.categoria_id;
+        payload.importe_mensual_beca = Number(selectedCategory.monto);
+        payload.importe_tarjeta_activa = Number(selectedCategory.monto_activa);
+        payload.importe_total = Number(selectedCategory.total);
+      } else {
+        payload.categoria_mono_id = data.categoria_id;
+        payload.importe_mensual_monotributo = Number(selectedCategory.monto);
+        payload.importe_tarjeta_activa = Number(selectedCategory.monto_activa);
+        payload.importe_total = Number(selectedCategory.total);
+      }
+
+      const { data: newPerson, error: insErr } = await supabase
+        .from(targetTable)
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (insErr) throw insErr;
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Log in audit log
+      await supabase.from("audit_log").insert({
+        usuario_id: user?.id,
+        accion: `Alta de ${isBecario ? "Becario" : "Monotributista"} desde Movimientos`,
+        tabla_afectada: targetTable,
+        datos_nuevos: payload,
+      });
+
+      // Log in movements log
+      await supabase.from("movimientos").insert({
+        tipo_persona: data.tipo_persona,
+        persona_id: newPerson.id,
+        tipo_movimiento: "alta",
+        anio: altaAnio,
+        mes: altaMes,
+        descripcion: `Alta registrada. Solicitado por: ${data.solicitado_por}`,
+        datos_nuevos: { estado: "Activo", fecha_alta: data.fecha_alta },
+        solicitado_por: data.solicitado_por,
+        usuario_id: user?.id
+      });
+
+      toast.success(`${isBecario ? "Becario" : "Monotributista"} registrado exitosamente.`);
+      setActiveDrawer(null);
+      altaForm.reset();
+      fetchMovementsData();
+      fetchCatalogs();
+    } catch (err: any) {
+      toast.error("Error al registrar alta: " + err.message);
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  // Submit Baja Action
+  const handleBajaSubmit = async (data: BajaValues) => {
+    setSubmitLoading(true);
+    try {
+      const isBecario = data.tipo_persona === "becario";
+      const targetTable = isBecario ? "becarios" : "monotributistas";
+      
+      const { error: updErr } = await supabase
+        .from(targetTable)
+        .update({
+          estado: "Baja",
+          fecha_baja: data.fecha_baja,
+          motivo_baja: data.motivo_baja
+        })
+        .eq("id", data.persona_id);
+
+      if (updErr) throw updErr;
+
+      const fechaBaja = new Date(data.fecha_baja + "T12:00:00");
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Log in audit log
+      await supabase.from("audit_log").insert({
+        usuario_id: user?.id,
+        accion: `Baja de ${isBecario ? "Becario" : "Monotributista"} desde Movimientos`,
+        tabla_afectada: targetTable,
+        registro_id: data.persona_id,
+        datos_nuevos: { estado: "Baja", fecha_baja: data.fecha_baja, motivo_baja: data.motivo_baja }
+      });
+
+      // Log in movements log
+      await supabase.from("movimientos").insert({
+        tipo_persona: data.tipo_persona,
+        persona_id: data.persona_id,
+        tipo_movimiento: "baja",
+        anio: fechaBaja.getFullYear(),
+        mes: fechaBaja.getMonth() + 1,
+        descripcion: `Baja procesada. Motivo: ${data.motivo_baja}. Solicitado por: ${data.solicitado_por}`,
+        datos_anteriores: { estado: "Activo" },
+        datos_nuevos: { estado: "Baja", fecha_baja: data.fecha_baja, motivo_baja: data.motivo_baja },
+        solicitado_por: data.solicitado_por,
+        usuario_id: user?.id
+      });
+
+      toast.success("Baja procesada con éxito.");
+      setActiveDrawer(null);
+      bajaForm.reset();
+      fetchMovementsData();
+      fetchCatalogs();
+    } catch (err: any) {
+      toast.error("Error al registrar baja: " + err.message);
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  // Submit Modificación Action
+  const handleModSubmit = async (data: ModificacionValues) => {
+    setSubmitLoading(true);
+    try {
+      const isBecario = data.tipo_persona === "becario";
+      const targetTable = isBecario ? "becarios" : "monotributistas";
+      const catList = isBecario ? categoriasBecas : categoriasMonos;
+      const selectedCategory = catList.find((c) => c.id === data.categoria_id);
+      
+      if (!selectedCategory) {
+        throw new Error("Categoría no encontrada");
+      }
+
+      const person = activePeople.find((p) => p.id === data.persona_id);
+      if (!person) {
+        throw new Error("Persona no encontrada");
+      }
+
+      const oldMonto = isBecario
+        ? Number(person.info.importe_mensual_beca)
+        : Number(person.info.importe_mensual_monotributo || 0);
+
+      const oldCatId = isBecario
+        ? person.info.categoria_beca_id
+        : person.info.categoria_mono_id;
+
+      let payload: Record<string, any> = {};
+
+      if (isBecario) {
+        payload.categoria_beca_id = data.categoria_id;
+        payload.importe_mensual_beca = Number(selectedCategory.monto);
+        payload.importe_tarjeta_activa = Number(selectedCategory.monto_activa);
+        payload.importe_total = Number(selectedCategory.total);
+      } else {
+        payload.categoria_mono_id = data.categoria_id;
+        payload.importe_mensual_monotributo = Number(selectedCategory.monto);
+        payload.importe_tarjeta_activa = Number(selectedCategory.monto_activa);
+        payload.importe_total = Number(selectedCategory.total);
+      }
+
+      const { error: updErr } = await supabase
+        .from(targetTable)
+        .update(payload)
+        .eq("id", data.persona_id);
+
+      if (updErr) throw updErr;
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Log in audit log
+      await supabase.from("audit_log").insert({
+        usuario_id: user?.id,
+        accion: `Modificación de monto/categoría desde Movimientos`,
+        tabla_afectada: targetTable,
+        registro_id: data.persona_id,
+        datos_nuevos: payload
+      });
+
+      // Log in movements log
+      await supabase.from("movimientos").insert({
+        tipo_persona: data.tipo_persona,
+        persona_id: data.persona_id,
+        tipo_movimiento: isBecario ? "cambio_monto" : "cambio_categoria",
+        anio: data.anio,
+        mes: data.mes,
+        descripcion: `Modificación de categoría. Solicitado por: ${data.solicitado_por}. Observaciones: ${data.observaciones || "Ninguna"}`,
+        datos_anteriores: {
+          monto: oldMonto,
+          categoria_id: oldCatId
+        },
+        datos_nuevos: {
+          monto: Number(selectedCategory.monto),
+          categoria_id: selectedCategory.id
+        },
+        solicitado_por: data.solicitado_por,
+        usuario_id: user?.id
+      });
+
+      toast.success("Categoría modificada con éxito.");
+      setActiveDrawer(null);
+      modForm.reset();
+      fetchMovementsData();
+      fetchCatalogs();
+    } catch (err: any) {
+      toast.error("Error al modificar categoría: " + err.message);
+    } finally {
+      setSubmitLoading(false);
     }
   };
 
@@ -244,7 +726,6 @@ export default function MovimientosPage() {
     return months[monthNum - 1] || monthNum;
   };
 
-  // Badge Style Helpers
   const getPersonaBadgeClass = (tipo: string) => {
     return tipo === "becario" ? styles.badge_becario : styles.badge_monotributista;
   };
@@ -287,27 +768,14 @@ export default function MovimientosPage() {
     const oldData = mov.datos_anteriores;
     const newData = mov.datos_nuevos;
 
-    if (mov.tipo_movimiento === "cambio_monto") {
-      const oldM = Number(oldData.monto || oldData.importe_mensual_beca || 0);
-      const newM = Number(newData.monto || newData.importe_mensual_beca || 0);
-      changes.push({
-        label: "Monto",
-        oldVal: `$${oldM.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`,
-        newVal: `$${newM.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
-      });
-    } else if (mov.tipo_movimiento === "cambio_categoria") {
-      if (oldData.monto !== undefined && newData.monto !== undefined) {
+    if (mov.tipo_movimiento === "cambio_monto" || mov.tipo_movimiento === "cambio_categoria") {
+      const oldM = Number(oldData.monto || 0);
+      const newM = Number(newData.monto || 0);
+      if (oldM !== newM) {
         changes.push({
-          label: "Básico",
-          oldVal: `$${Number(oldData.monto).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`,
-          newVal: `$${Number(newData.monto).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
-        });
-      }
-      if (oldData.total !== undefined && newData.total !== undefined) {
-        changes.push({
-          label: "Total",
-          oldVal: `$${Number(oldData.total).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`,
-          newVal: `$${Number(newData.total).toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
+          label: "Monto",
+          oldVal: `$${oldM.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`,
+          newVal: `$${newM.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`
         });
       }
     } else if (mov.tipo_movimiento === "baja") {
@@ -323,19 +791,6 @@ export default function MovimientosPage() {
           newVal: formatDate(newData.fecha_baja).split(" ")[0]
         });
       }
-    }
-
-    // Generic fallback for any other fields that changed
-    if (changes.length === 0) {
-      Object.keys(newData).forEach((key) => {
-        if (JSON.stringify(oldData[key]) !== JSON.stringify(newData[key])) {
-          changes.push({
-            label: key.replace(/_/g, " "),
-            oldVal: typeof oldData[key] === "object" ? JSON.stringify(oldData[key]) : String(oldData[key]),
-            newVal: typeof newData[key] === "object" ? JSON.stringify(newData[key]) : String(newData[key])
-          });
-        }
-      });
     }
 
     if (changes.length === 0) return null;
@@ -382,15 +837,45 @@ export default function MovimientosPage() {
             Historial de auditoría de altas, bajas y cambios realizados durante el año {selectedYear}.
           </p>
         </div>
-        <button
-          onClick={fetchMovementsData}
-          className="secondaryBtn"
-          style={{ display: "flex", alignItems: "center", gap: "8px" }}
-          disabled={loading}
-        >
-          <RefreshCw size={14} className={loading ? styles.spin : ""} />
-          <span>Actualizar</span>
-        </button>
+
+        <div className={styles.headerActionsGroup}>
+          <button
+            onClick={() => setActiveDrawer("alta")}
+            className={styles.primaryBtn}
+            style={{ background: "#10b981", boxShadow: "0 0 16px rgba(16, 185, 129, 0.2)" }}
+          >
+            <Plus size={16} />
+            <span>Registrar Alta</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDrawer("baja")}
+            className={styles.primaryBtn}
+            style={{ background: "#f43f5e", boxShadow: "0 0 16px rgba(244, 63, 94, 0.2)" }}
+          >
+            <Trash2 size={16} />
+            <span>Procesar Baja</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDrawer("modificacion")}
+            className={styles.primaryBtn}
+            style={{ background: "#f59e0b", boxShadow: "0 0 16px rgba(245, 158, 11, 0.2)" }}
+          >
+            <ArrowRightLeft size={16} />
+            <span>Modificar Categoría</span>
+          </button>
+
+          <button
+            onClick={fetchMovementsData}
+            className="secondaryBtn"
+            style={{ display: "flex", alignItems: "center", gap: "8px" }}
+            disabled={loading}
+          >
+            <RefreshCw size={14} className={loading ? styles.spin : ""} />
+            <span>Actualizar</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -440,7 +925,6 @@ export default function MovimientosPage() {
       <div className={styles.filtersWrapper}>
         {/* Row 1: Period Filters */}
         <div className={styles.periodRow}>
-          {/* Year Selector */}
           <div className={styles.periodSelector}>
             <span className={styles.filterLabel}>Año:</span>
             <select
@@ -543,7 +1027,7 @@ export default function MovimientosPage() {
             <input
               type="text"
               className={styles.searchInput}
-              placeholder="Buscar por persona, DNI o descripción..."
+              placeholder="Buscar por persona, DNI, descripción o solicitante..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -617,6 +1101,7 @@ export default function MovimientosPage() {
                 <th>Tipo Movimiento</th>
                 <th>Descripción</th>
                 <th>Período</th>
+                <th>Solicitado por</th>
                 <th>Usuario</th>
               </tr>
             </thead>
@@ -663,6 +1148,9 @@ export default function MovimientosPage() {
                     </td>
                     <td className={styles.dateCell}>
                       {getMonthName(mov.mes)} / {mov.anio}
+                    </td>
+                    <td>
+                      <span className={styles.solicitanteTxt}>{mov.solicitado_por || "—"}</span>
                     </td>
                     <td>
                       {userObj ? (
@@ -722,6 +1210,435 @@ export default function MovimientosPage() {
           )}
         </div>
       )}
+
+      {/* DRAWER: REGISTRAR ALTA */}
+      <Drawer
+        isOpen={activeDrawer === "alta"}
+        onClose={() => {
+          setActiveDrawer(null);
+          altaForm.reset();
+        }}
+        title="Registrar Alta de Personal"
+        size="md"
+      >
+        <form onSubmit={altaForm.handleSubmit(handleAltaSubmit)} className={styles.drawerForm}>
+          <div className={styles.formSection}>
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>Tipo de Persona *</label>
+                <select className="input-field" {...altaForm.register("tipo_persona")}>
+                  <option value="becario">Becario</option>
+                  <option value="monotributista">Monotributista</option>
+                </select>
+              </div>
+              <div className={styles.formGroup}>
+                <label>Solicitado por *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Ej. Juan Pérez (Secretario)"
+                  {...altaForm.register("solicitado_por")}
+                />
+                {altaForm.formState.errors.solicitado_por && (
+                  <span className={styles.formError}>{altaForm.formState.errors.solicitado_por.message}</span>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Apellido y Nombre *</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Apellido Nombre"
+                {...altaForm.register("apellido_nombre")}
+              />
+              {altaForm.formState.errors.apellido_nombre && (
+                <span className={styles.formError}>{altaForm.formState.errors.apellido_nombre.message}</span>
+              )}
+            </div>
+
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>DNI *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="8 dígitos"
+                  {...altaForm.register("dni")}
+                />
+                {altaForm.formState.errors.dni && (
+                  <span className={styles.formError}>{altaForm.formState.errors.dni.message}</span>
+                )}
+              </div>
+              <div className={styles.formGroup}>
+                <label>CUIT/CUIL *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="11 dígitos"
+                  {...altaForm.register("cuit")}
+                />
+                {altaForm.formState.errors.cuit && (
+                  <span className={styles.formError}>{altaForm.formState.errors.cuit.message}</span>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>Subsecretaría *</label>
+                <select className="input-field" {...altaForm.register("subsecretaria_id")}>
+                  <option value="">Seleccione una...</option>
+                  {subsecretarias.map((s) => (
+                    <option key={s.id} value={s.id}>{s.nombre}</option>
+                  ))}
+                </select>
+                {altaForm.formState.errors.subsecretaria_id && (
+                  <span className={styles.formError}>{altaForm.formState.errors.subsecretaria_id.message}</span>
+                )}
+              </div>
+              <div className={styles.formGroup}>
+                <label>Área *</label>
+                <select className="input-field" {...altaForm.register("area_id")} disabled={!selectedAltaSub}>
+                  <option value="">Seleccione una...</option>
+                  {filteredAreasForAlta.map((a) => (
+                    <option key={a.id} value={a.id}>{a.nombre}</option>
+                  ))}
+                </select>
+                {altaForm.formState.errors.area_id && (
+                  <span className={styles.formError}>{altaForm.formState.errors.area_id.message}</span>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>Responsable</label>
+                <select className="input-field" {...altaForm.register("responsable_id")}>
+                  <option value="">Seleccione uno...</option>
+                  {responsables.map((r) => (
+                    <option key={r.id} value={r.id}>{r.nombre_completo}</option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.formGroup}>
+                <label>Categoría *</label>
+                <select className="input-field" {...altaForm.register("categoria_id")}>
+                  <option value="">Seleccione una...</option>
+                  {dynamicCategoriesForAlta.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {selectedAltaTipo === "becario"
+                        ? `Cat ${c.numero_categoria} ($${Number(c.monto).toLocaleString("es-AR")})`
+                        : `Letra ${c.letra} ($${Number(c.monto).toLocaleString("es-AR")})`}
+                    </option>
+                  ))}
+                </select>
+                {altaForm.formState.errors.categoria_id && (
+                  <span className={styles.formError}>{altaForm.formState.errors.categoria_id.message}</span>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>Fecha de Alta *</label>
+                <input type="date" className="input-field" {...altaForm.register("fecha_alta")} />
+              </div>
+              <div className={styles.formGroup}>
+                <label>CBU</label>
+                <input type="text" className="input-field" placeholder="22 dígitos" {...altaForm.register("cbu")} />
+              </div>
+            </div>
+
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>Teléfono</label>
+                <input type="text" className="input-field" placeholder="Ej. 351..." {...altaForm.register("telefono")} />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Email</label>
+                <input type="text" className="input-field" placeholder="mail@example.com" {...altaForm.register("email")} />
+                {altaForm.formState.errors.email && (
+                  <span className={styles.formError}>{altaForm.formState.errors.email.message}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.formActions}>
+            <button
+              type="button"
+              className="input-field"
+              onClick={() => {
+                setActiveDrawer(null);
+                altaForm.reset();
+              }}
+              disabled={submitLoading}
+            >
+              Cancelar
+            </button>
+            <button type="submit" className={styles.primaryBtn} disabled={submitLoading}>
+              {submitLoading ? (
+                <>
+                  <Loader2 className={styles.spin} size={16} />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <span>Confirmar Alta</span>
+              )}
+            </button>
+          </div>
+        </form>
+      </Drawer>
+
+      {/* DRAWER: PROCESAR BAJA */}
+      <Drawer
+        isOpen={activeDrawer === "baja"}
+        onClose={() => {
+          setActiveDrawer(null);
+          bajaForm.reset();
+        }}
+        title="Procesar Baja de Personal"
+        size="md"
+      >
+        <form onSubmit={bajaForm.handleSubmit(handleBajaSubmit)} className={styles.drawerForm}>
+          <div className={styles.formSection}>
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>Tipo de Persona *</label>
+                <select className="input-field" {...bajaForm.register("tipo_persona")}>
+                  <option value="becario">Becario</option>
+                  <option value="monotributista">Monotributista</option>
+                </select>
+              </div>
+              <div className={styles.formGroup}>
+                <label>Solicitado por *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Ej. Juan Pérez (Secretario)"
+                  {...bajaForm.register("solicitado_por")}
+                />
+                {bajaForm.formState.errors.solicitado_por && (
+                  <span className={styles.formError}>{bajaForm.formState.errors.solicitado_por.message}</span>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Buscar Persona Activa *</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Filtrar por nombre o DNI..."
+                value={dropdownSearch}
+                onChange={(e) => setDropdownSearch(e.target.value)}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Seleccionar Persona *</label>
+              <select className="input-field" {...bajaForm.register("persona_id")}>
+                <option value="">Seleccione una...</option>
+                {filteredActivePeople.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} (DNI: {p.dni})
+                  </option>
+                ))}
+              </select>
+              {bajaForm.formState.errors.persona_id && (
+                <span className={styles.formError}>{bajaForm.formState.errors.persona_id.message}</span>
+              )}
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Fecha de Baja *</label>
+              <input type="date" className="input-field" {...bajaForm.register("fecha_baja")} />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Motivo de la Baja *</label>
+              <textarea
+                className="input-field"
+                style={{ minHeight: "100px", padding: "10px", fontFamily: "inherit" }}
+                placeholder="Detalle el motivo de la desvinculación..."
+                {...bajaForm.register("motivo_baja")}
+              />
+              {bajaForm.formState.errors.motivo_baja && (
+                <span className={styles.formError}>{bajaForm.formState.errors.motivo_baja.message}</span>
+              )}
+            </div>
+          </div>
+
+          <div className={styles.formActions}>
+            <button
+              type="button"
+              className="input-field"
+              onClick={() => {
+                setActiveDrawer(null);
+                bajaForm.reset();
+              }}
+              disabled={submitLoading}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className={styles.primaryBtn}
+              style={{ background: "#f43f5e" }}
+              disabled={submitLoading}
+            >
+              {submitLoading ? (
+                <>
+                  <Loader2 className={styles.spin} size={16} />
+                  <span>Procesando...</span>
+                </>
+              ) : (
+                <span>Confirmar Baja</span>
+              )}
+            </button>
+          </div>
+        </form>
+      </Drawer>
+
+      {/* DRAWER: MODIFICAR CATEGORÍA */}
+      <Drawer
+        isOpen={activeDrawer === "modificacion"}
+        onClose={() => {
+          setActiveDrawer(null);
+          modForm.reset();
+        }}
+        title="Modificar Monto / Categoría"
+        size="md"
+      >
+        <form onSubmit={modForm.handleSubmit(handleModSubmit)} className={styles.drawerForm}>
+          <div className={styles.formSection}>
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>Tipo de Persona *</label>
+                <select className="input-field" {...modForm.register("tipo_persona")}>
+                  <option value="becario">Becario</option>
+                  <option value="monotributista">Monotributista</option>
+                </select>
+              </div>
+              <div className={styles.formGroup}>
+                <label>Solicitado por *</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Ej. Juan Pérez (Secretario)"
+                  {...modForm.register("solicitado_por")}
+                />
+                {modForm.formState.errors.solicitado_por && (
+                  <span className={styles.formError}>{modForm.formState.errors.solicitado_por.message}</span>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Buscar Persona Activa *</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Filtrar por nombre o DNI..."
+                value={dropdownSearch}
+                onChange={(e) => setDropdownSearch(e.target.value)}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Seleccionar Persona *</label>
+              <select className="input-field" {...modForm.register("persona_id")}>
+                <option value="">Seleccione una...</option>
+                {filteredActivePeople.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} (DNI: {p.dni})
+                  </option>
+                ))}
+              </select>
+              {modForm.formState.errors.persona_id && (
+                <span className={styles.formError}>{modForm.formState.errors.persona_id.message}</span>
+              )}
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Nueva Categoría *</label>
+              <select className="input-field" {...modForm.register("categoria_id")}>
+                <option value="">Seleccione una...</option>
+                {dynamicCategoriesForMod.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {selectedModTipo === "becario"
+                      ? `Cat ${c.numero_categoria} ($${Number(c.monto).toLocaleString("es-AR")})`
+                      : `Letra ${c.letra} ($${Number(c.monto).toLocaleString("es-AR")})`}
+                  </option>
+                ))}
+              </select>
+              {modForm.formState.errors.categoria_id && (
+                <span className={styles.formError}>{modForm.formState.errors.categoria_id.message}</span>
+              )}
+            </div>
+
+            <div className={styles.formRow}>
+              <div className={styles.formGroup}>
+                <label>Mes de Vigencia *</label>
+                <select className="input-field" {...modForm.register("mes", { valueAsNumber: true })}>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <option key={m} value={m}>{getMonthName(m)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.formGroup}>
+                <label>Año de Vigencia *</label>
+                <select className="input-field" {...modForm.register("anio", { valueAsNumber: true })}>
+                  {years.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Observaciones / Descripción del Cambio</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Ej. Ascenso por desempeño"
+                {...modForm.register("observaciones")}
+              />
+            </div>
+          </div>
+
+          <div className={styles.formActions}>
+            <button
+              type="button"
+              className="input-field"
+              onClick={() => {
+                setActiveDrawer(null);
+                modForm.reset();
+              }}
+              disabled={submitLoading}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className={styles.primaryBtn}
+              style={{ background: "#f59e0b" }}
+              disabled={submitLoading}
+            >
+              {submitLoading ? (
+                <>
+                  <Loader2 className={styles.spin} size={16} />
+                  <span>Guardando...</span>
+                </>
+              ) : (
+                <span>Confirmar Modificación</span>
+              )}
+            </button>
+          </div>
+        </form>
+      </Drawer>
     </div>
   );
 }
