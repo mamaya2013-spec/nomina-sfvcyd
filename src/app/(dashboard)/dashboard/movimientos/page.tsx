@@ -868,8 +868,7 @@ export default function MovimientosPage() {
 
           <button
             onClick={fetchMovementsData}
-            className="secondaryBtn"
-            style={{ display: "flex", alignItems: "center", gap: "8px" }}
+            className={styles.secondaryBtn}
             disabled={loading}
           >
             <RefreshCw size={14} className={loading ? styles.spin : ""} />
