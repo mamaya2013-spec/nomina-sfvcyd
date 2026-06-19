@@ -349,7 +349,8 @@ export default function ResumenGestionPage() {
     setExportingPDF(true);
     try {
       const { default: jsPDF } = await import("jspdf");
-      await import("jspdf-autotable");
+      const { applyPlugin } = await import("jspdf-autotable");
+      applyPlugin(jsPDF);
       const doc = new jsPDF("p", "mm", "a4");
 
       const semLabel = `Semestre ${selectedSemester.anio} - ${selectedSemester.activo ? "Activo" : "Bloqueado"}`;

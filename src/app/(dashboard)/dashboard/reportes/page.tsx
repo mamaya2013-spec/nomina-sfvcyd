@@ -832,7 +832,8 @@ export default function ReportesPage() {
     if (!reportResult || !activeTemplateObj || !selectedSemester) return;
     try {
       const { default: jsPDF } = await import("jspdf");
-      await import("jspdf-autotable");
+      const { applyPlugin } = await import("jspdf-autotable");
+      applyPlugin(jsPDF);
       const doc = new jsPDF("l", "mm", "a4"); // Landscape layout
 
       // Header Design
