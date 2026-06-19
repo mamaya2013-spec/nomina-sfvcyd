@@ -24,6 +24,7 @@ import {
   Menu,
   X,
   Search,
+  TrendingUp,
 } from "lucide-react";
 import styles from "./layout.module.css";
 
@@ -39,6 +40,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+  { name: "Resumen de Gestión", path: "/dashboard/resumen", icon: TrendingUp },
   { name: "Becarios", path: "/dashboard/becarios", icon: Users },
   { name: "Monotributistas", path: "/dashboard/monotributistas", icon: Briefcase },
   { name: "Movimientos", path: "/dashboard/movimientos", icon: Activity },
