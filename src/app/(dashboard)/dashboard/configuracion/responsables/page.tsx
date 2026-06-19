@@ -88,12 +88,12 @@ export default function ResponsablesConfigPage() {
 
       if (respsErr) throw respsErr;
 
-      const { data: subs } = await supabase.from("subsecretarias").select("*").eq("activa", true).order("orden");
-      const { data: ars } = await supabase.from("areas").select("*").eq("activa", true).order("orden");
+      const { data: subs } = await supabase.from("subsecretarias").select("*").eq("activa", true).order("nombre", { ascending: true });
+      const { data: ars } = await supabase.from("areas").select("*").eq("activa", true).order("nombre", { ascending: true });
 
       setResponsables(resps || []);
-      setSubsecretarias(subs || []);
-      setAreas(ars || []);
+      setSubsecretarias((subs || []).sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      setAreas((ars || []).sort((a, b) => a.nombre.localeCompare(b.nombre)));
     } catch (err: any) {
       toast.error("Error al cargar responsables: " + err.message);
     } finally {
