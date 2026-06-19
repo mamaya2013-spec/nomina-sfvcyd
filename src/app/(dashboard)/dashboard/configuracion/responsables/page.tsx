@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   Mail,
   Phone,
+  Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useForm, Controller } from "react-hook-form";
@@ -430,6 +431,41 @@ export default function ResponsablesConfigPage() {
     }
   };
 
+  // Delete responsible
+  const handleDelete = async (resp: any) => {
+    if (!confirm(`¿Está seguro de eliminar al responsable "${resp.nombre_completo}"? Se quitará de todos los agentes asociados automáticamente.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("responsables").delete().eq("id", resp.id);
+      if (error) throw error;
+
+      // Audit Log
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("audit_log").insert({
+        usuario_id: user?.id,
+        accion: "Eliminación de Responsable",
+        tabla_afectada: "responsables",
+        registro_id: resp.id,
+        datos_anteriores: resp,
+      });
+
+      toast.success("Responsable eliminado con éxito.");
+      fetchData();
+      
+      // Trigger cascade sync in background
+      toast.promise(syncMembersResponsibles(), {
+        loading: "Sincronizando responsables en la nómina...",
+        success: "Nómina sincronizada correctamente.",
+        error: "Error al sincronizar responsables de la nómina.",
+      });
+    } catch (err: any) {
+      console.error("Error deleting responsible:", err);
+      toast.error("Error al eliminar responsable: " + err.message);
+    }
+  };
+
   // Filter logic
   const filteredResponsables = useMemo(() => {
     return responsables.filter((r) => {
@@ -571,6 +607,13 @@ export default function ResponsablesConfigPage() {
                 title={resp.activo ? "Desactivar Responsable" : "Activar Responsable"}
               >
                 {resp.activo ? <ToggleRight size={18} className="text-emerald" /> : <ToggleLeft size={18} className="text-muted" />}
+              </button>
+              <button
+                onClick={() => handleDelete(resp)}
+                className={`${styles.actionBtn} ${styles.delete}`}
+                title="Eliminar Responsable"
+              >
+                <Trash2 size={16} />
               </button>
             </div>
           );

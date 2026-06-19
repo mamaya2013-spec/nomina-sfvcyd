@@ -231,6 +231,12 @@
   color: var(--accent-blue);
 }
 
+.actionBtn.delete:hover {
+  background: rgba(244, 63, 94, 0.1);
+  border-color: rgba(244, 63, 94, 0.3);
+  color: #f43f5e;
+}
+
 /* Pagination Control */
 .pagination {
   display: flex;
