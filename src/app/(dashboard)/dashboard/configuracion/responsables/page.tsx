@@ -224,15 +224,38 @@ export default function ResponsablesConfigPage() {
 
     if (becErr) throw becErr;
     if (becarios) {
+      const becUpdatesMap: { [respId: string]: string[] } = {};
+      const becNullUpdates: string[] = [];
+
       for (const b of becarios) {
         const correctRespId = findCorrectResp(b.subsecretaria_id, b.area_id);
         if (b.responsable_id !== correctRespId) {
-          const { error: updErr } = await supabase
-            .from("becarios")
-            .update({ responsable_id: correctRespId })
-            .eq("id", b.id);
-          if (updErr) console.error("Error updating becario:", updErr);
+          if (correctRespId) {
+            if (!becUpdatesMap[correctRespId]) {
+              becUpdatesMap[correctRespId] = [];
+            }
+            becUpdatesMap[correctRespId].push(b.id);
+          } else {
+            becNullUpdates.push(b.id);
+          }
         }
+      }
+
+      // Execute updates in bulk
+      for (const [respId, ids] of Object.entries(becUpdatesMap)) {
+        const { error: updErr } = await supabase
+          .from("becarios")
+          .update({ responsable_id: respId })
+          .in("id", ids);
+        if (updErr) console.error(`Error updating becarios to responsible ${respId}:`, updErr);
+      }
+
+      if (becNullUpdates.length > 0) {
+        const { error: updErr } = await supabase
+          .from("becarios")
+          .update({ responsable_id: null })
+          .in("id", becNullUpdates);
+        if (updErr) console.error("Error setting becarios responsable to null:", updErr);
       }
     }
 
@@ -244,15 +267,38 @@ export default function ResponsablesConfigPage() {
 
     if (monErr) throw monErr;
     if (monos) {
+      const monUpdatesMap: { [respId: string]: string[] } = {};
+      const monNullUpdates: string[] = [];
+
       for (const m of monos) {
         const correctRespId = findCorrectResp(m.subsecretaria_id, m.area_id);
         if (m.responsable_id !== correctRespId) {
-          const { error: updErr } = await supabase
-            .from("monotributistas")
-            .update({ responsable_id: correctRespId })
-            .eq("id", m.id);
-          if (updErr) console.error("Error updating monotributista:", updErr);
+          if (correctRespId) {
+            if (!monUpdatesMap[correctRespId]) {
+              monUpdatesMap[correctRespId] = [];
+            }
+            monUpdatesMap[correctRespId].push(m.id);
+          } else {
+            monNullUpdates.push(m.id);
+          }
         }
+      }
+
+      // Execute updates in bulk
+      for (const [respId, ids] of Object.entries(monUpdatesMap)) {
+        const { error: updErr } = await supabase
+          .from("monotributistas")
+          .update({ responsable_id: respId })
+          .in("id", ids);
+        if (updErr) console.error(`Error updating monotributistas to responsible ${respId}:`, updErr);
+      }
+
+      if (monNullUpdates.length > 0) {
+        const { error: updErr } = await supabase
+          .from("monotributistas")
+          .update({ responsable_id: null })
+          .in("id", monNullUpdates);
+        if (updErr) console.error("Error setting monotributistas responsable to null:", updErr);
       }
     }
   };
