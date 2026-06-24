@@ -58,58 +58,77 @@ export async function GET(req: NextRequest) {
 
     if (exists) {
       // Retrieve list with names and CBU/CUIL from live tables
-      // For becarios
-      const { data: becariosLiq } = await supabase
-        .from("liquidaciones_mensuales")
-        .select(`
-          *,
-          becarios(id, apellido_nombre, cuit, cbu, categorias_becas(numero_categoria))
-        `)
-        .eq("anio", anio)
-        .eq("mes", mes)
-        .eq("tipo_persona", "becario");
+      const becarioIds = savedLiquidations
+        .filter((l: any) => l.tipo_persona === "becario")
+        .map((l: any) => l.persona_id);
 
-      // For monotributistas
-      const { data: monosLiq } = await supabase
-        .from("liquidaciones_mensuales")
-        .select(`
-          *,
-          monotributistas(id, apellido_nombre, cuit, cbu, categorias_monotributistas(letra))
-        `)
-        .eq("anio", anio)
-        .eq("mes", mes)
-        .eq("tipo_persona", "monotributista");
+      const monoIds = savedLiquidations
+        .filter((l: any) => l.tipo_persona === "monotributista")
+        .map((l: any) => l.persona_id);
 
-      const list = [
-        ...(becariosLiq || []).map((l: any) => ({
-          id: l.id,
-          tipo_persona: "becario",
-          persona_id: l.persona_id,
-          apellido_nombre: l.becarios?.apellido_nombre || "Desconocido",
-          cuit: l.becarios?.cuit || "-",
-          cbu: l.becarios?.cbu || "-",
-          categoria: l.becarios?.categorias_becas?.numero_categoria 
-            ? `Cat. ${l.becarios.categorias_becas.numero_categoria}`
-            : "-",
-          monto_base: Number(l.monto_beca_o_mono),
-          monto_tarjeta_activa: Number(l.monto_tarjeta_activa),
-          total_liquidado: Number(l.total_liquidado),
-        })),
-        ...(monosLiq || []).map((l: any) => ({
-          id: l.id,
-          tipo_persona: "monotributista",
-          persona_id: l.persona_id,
-          apellido_nombre: l.monotributistas?.apellido_nombre || "Desconocido",
-          cuit: l.monotributistas?.cuit || "-",
-          cbu: l.monotributistas?.cbu || "-",
-          categoria: l.monotributistas?.categorias_monotributistas?.letra 
-            ? `Letra ${l.monotributistas.categorias_monotributistas.letra}`
-            : "-",
-          monto_base: Number(l.monto_beca_o_mono),
-          monto_tarjeta_activa: Number(l.monto_tarjeta_activa),
-          total_liquidado: Number(l.total_liquidado),
-        })),
-      ];
+      const becariosMap: Record<string, any> = {};
+      if (becarioIds.length > 0) {
+        const { data: becarios, error: becErr } = await supabase
+          .from("becarios")
+          .select("id, apellido_nombre, cuit, cbu, categorias_becas(numero_categoria)")
+          .in("id", becarioIds);
+        if (becErr) throw becErr;
+        if (becarios) {
+          becarios.forEach((b: any) => {
+            becariosMap[b.id] = b;
+          });
+        }
+      }
+
+      const monosMap: Record<string, any> = {};
+      if (monoIds.length > 0) {
+        const { data: monotributistas, error: monoErr } = await supabase
+          .from("monotributistas")
+          .select("id, apellido_nombre, cuit, cbu, categorias_monotributistas(letra)")
+          .in("id", monoIds);
+        if (monoErr) throw monoErr;
+        if (monotributistas) {
+          monotributistas.forEach((m: any) => {
+            monosMap[m.id] = m;
+          });
+        }
+      }
+
+      const list = savedLiquidations.map((l: any) => {
+        if (l.tipo_persona === "becario") {
+          const b = becariosMap[l.persona_id];
+          return {
+            id: l.id,
+            tipo_persona: "becario",
+            persona_id: l.persona_id,
+            apellido_nombre: b?.apellido_nombre || "Desconocido",
+            cuit: b?.cuit || "-",
+            cbu: b?.cbu || "-",
+            categoria: b?.categorias_becas?.numero_categoria 
+              ? `Cat. ${b.categorias_becas.numero_categoria}`
+              : "-",
+            monto_base: Number(l.monto_beca_o_mono),
+            monto_tarjeta_activa: Number(l.monto_tarjeta_activa),
+            total_liquidado: Number(l.total_liquidado),
+          };
+        } else {
+          const m = monosMap[l.persona_id];
+          return {
+            id: l.id,
+            tipo_persona: "monotributista",
+            persona_id: l.persona_id,
+            apellido_nombre: m?.apellido_nombre || "Desconocido",
+            cuit: m?.cuit || "-",
+            cbu: m?.cbu || "-",
+            categoria: m?.categorias_monotributistas?.letra 
+              ? `Letra ${m.categorias_monotributistas.letra}`
+              : "-",
+            monto_base: Number(l.monto_beca_o_mono),
+            monto_tarjeta_activa: Number(l.monto_tarjeta_activa),
+            total_liquidado: Number(l.total_liquidado),
+          };
+        }
+      });
 
       const status = savedLiquidations[0].estado_liquidacion || "pendiente";
 
