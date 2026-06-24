@@ -537,15 +537,16 @@ export default function MovimientosPage() {
       const { data: { user } } = await supabase.auth.getUser();
 
       // Log in audit log
-      await supabase.from("audit_log").insert({
+      const { error: auditErr } = await supabase.from("audit_log").insert({
         usuario_id: user?.id,
         accion: `Alta de ${isBecario ? "Becario" : "Monotributista"} desde Movimientos`,
         tabla_afectada: targetTable,
         datos_nuevos: payload,
       });
+      if (auditErr) throw auditErr;
 
       // Log in movements log
-      await supabase.from("movimientos").insert({
+      const { error: movErr } = await supabase.from("movimientos").insert({
         tipo_persona: data.tipo_persona,
         persona_id: newPerson.id,
         tipo_movimiento: "alta",
@@ -556,6 +557,7 @@ export default function MovimientosPage() {
         solicitado_por: data.solicitado_por,
         usuario_id: user?.id
       });
+      if (movErr) throw movErr;
 
       toast.success(`${isBecario ? "Becario" : "Monotributista"} registrado exitosamente.`);
       closeAltaDrawer();
@@ -597,16 +599,17 @@ export default function MovimientosPage() {
       const { data: { user } } = await supabase.auth.getUser();
 
       // Log in audit log
-      await supabase.from("audit_log").insert({
+      const { error: auditErr } = await supabase.from("audit_log").insert({
         usuario_id: user?.id,
         accion: `Baja de ${isBecario ? "Becario" : "Monotributista"} desde Movimientos`,
         tabla_afectada: targetTable,
         registro_id: data.persona_id,
         datos_nuevos: { estado: "Baja", fecha_baja: data.fecha_baja, motivo_baja: data.motivo_baja }
       });
+      if (auditErr) throw auditErr;
 
       // Log in movements log
-      await supabase.from("movimientos").insert({
+      const { error: movErr } = await supabase.from("movimientos").insert({
         tipo_persona: data.tipo_persona,
         persona_id: data.persona_id,
         tipo_movimiento: "baja",
@@ -618,6 +621,7 @@ export default function MovimientosPage() {
         solicitado_por: data.solicitado_por,
         usuario_id: user?.id
       });
+      if (movErr) throw movErr;
 
       toast.success("Baja procesada con éxito.");
       setActiveDrawer(null);
@@ -681,16 +685,17 @@ export default function MovimientosPage() {
       const { data: { user } } = await supabase.auth.getUser();
 
       // Log in audit log
-      await supabase.from("audit_log").insert({
+      const { error: auditErr } = await supabase.from("audit_log").insert({
         usuario_id: user?.id,
         accion: `Modificación de monto/categoría desde Movimientos`,
         tabla_afectada: targetTable,
         registro_id: data.persona_id,
         datos_nuevos: payload
       });
+      if (auditErr) throw auditErr;
 
       // Log in movements log
-      await supabase.from("movimientos").insert({
+      const { error: movErr } = await supabase.from("movimientos").insert({
         tipo_persona: data.tipo_persona,
         persona_id: data.persona_id,
         tipo_movimiento: isBecario ? "cambio_monto" : "cambio_categoria",
@@ -708,6 +713,7 @@ export default function MovimientosPage() {
         solicitado_por: data.solicitado_por,
         usuario_id: user?.id
       });
+      if (movErr) throw movErr;
 
       toast.success("Categoría modificada con éxito.");
       setActiveDrawer(null);
