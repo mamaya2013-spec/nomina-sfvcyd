@@ -37,8 +37,14 @@ export async function GET(req: NextRequest) {
     }
 
     if (queryFilter) {
-      const { data: becs } = await supabase.from("becarios").select("id, apellido_nombre, estado, subsecretaria_id, area_id");
-      const { data: monos } = await supabase.from("monotributistas").select("id, apellido_nombre, estado, subsecretaria_id, area_id");
+      const { data: becs } = await supabase
+        .from("becarios")
+        .select("id, apellido_nombre, estado, subsecretaria_id, area_id")
+        .or(queryFilter);
+      const { data: monos } = await supabase
+        .from("monotributistas")
+        .select("id, apellido_nombre, estado, subsecretaria_id, area_id")
+        .or(queryFilter);
       
       // Filter active or recently active
       allowedBecs = becs || [];
@@ -68,6 +74,16 @@ export async function GET(req: NextRequest) {
 
       if (campErr || !campaign) {
         return NextResponse.json({ error: "Campaña no encontrada" }, { status: 404 });
+      }
+
+      if (allowedPersonaIds.length === 0) {
+        return NextResponse.json({
+          campaign: {
+            ...campaign,
+            stats: { total: 0, approved: 0, incomplete: 0, pending: 0, progress: 0 }
+          },
+          deliveries: [],
+        });
       }
 
       // Fetch deliveries for this campaign
@@ -119,8 +135,25 @@ export async function GET(req: NextRequest) {
       // Sort by name ascending
       formattedDeliveries.sort((a, b) => a.nombre_persona.localeCompare(b.nombre_persona));
 
+      // Calculate stats for the campaign
+      const total = formattedDeliveries.length;
+      const approved = formattedDeliveries.filter(d => d.estado_entrega === "entregado").length;
+      const incomplete = formattedDeliveries.filter(d => d.estado_entrega === "incompleto").length;
+      const pending = total - approved - incomplete;
+
+      const campaignWithStats = {
+        ...campaign,
+        stats: {
+          total,
+          approved,
+          incomplete,
+          pending,
+          progress: total > 0 ? Math.round((approved / total) * 100) : 0,
+        }
+      };
+
       return NextResponse.json({
-        campaign,
+        campaign: campaignWithStats,
         deliveries: formattedDeliveries,
       });
     }

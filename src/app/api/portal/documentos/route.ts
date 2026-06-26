@@ -39,8 +39,14 @@ export async function GET(req: NextRequest) {
     }
 
     if (queryFilter) {
-      const { data: becs } = await supabase.from("becarios").select("id, apellido_nombre, subsecretaria_id, area_id");
-      const { data: monos } = await supabase.from("monotributistas").select("id, apellido_nombre, subsecretaria_id, area_id");
+      const { data: becs } = await supabase
+        .from("becarios")
+        .select("id, apellido_nombre, subsecretaria_id, area_id")
+        .or(queryFilter);
+      const { data: monos } = await supabase
+        .from("monotributistas")
+        .select("id, apellido_nombre, subsecretaria_id, area_id")
+        .or(queryFilter);
       allowedBecs = becs || [];
       allowedMonos = monos || [];
     }
