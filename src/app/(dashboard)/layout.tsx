@@ -25,12 +25,15 @@ import {
   X,
   Search,
   TrendingUp,
+  Sun,
+  Moon,
 } from "lucide-react";
 import styles from "./layout.module.css";
 
 const CommandPalette = dynamic(() => import("@/components/ui/CommandPalette"), { ssr: false });
 const NotificationPanel = dynamic(() => import("@/components/ui/NotificationPanel"), { ssr: false });
 import { SemesterProvider, useSemester } from "@/lib/contexts/SemesterContext";
+import { ThemeProvider, useTheme } from "@/lib/contexts/ThemeContext";
 
 interface MenuItem {
   name: string;
@@ -55,9 +58,11 @@ const menuItems: MenuItem[] = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <SemesterProvider>
-      <DashboardLayoutContent>{children}</DashboardLayoutContent>
-    </SemesterProvider>
+    <ThemeProvider>
+      <SemesterProvider>
+        <DashboardLayoutContent>{children}</DashboardLayoutContent>
+      </SemesterProvider>
+    </ThemeProvider>
   );
 }
 
@@ -73,6 +78,7 @@ function DashboardLayoutContent({
   const router = useRouter();
   const supabase = createClient();
   const { semesters, selectedSemester, selectSemester, loading: loadingSemesters } = useSemester();
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -188,6 +194,14 @@ function DashboardLayoutContent({
 
             <button className={styles.actionButton} title="Buscar (Cmd+K)" onClick={triggerSearch}>
               <Search size={20} />
+            </button>
+
+            <button
+              className={styles.actionButton}
+              title={theme === "dark" ? "Cambiar a Tema Claro" : "Cambiar a Tema Oscuro"}
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
             <div style={{ position: "relative" }}>

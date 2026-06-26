@@ -1,0 +1,194 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { getPortalSession } from "@/lib/portal/auth";
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getPortalSession();
+    if (!session) {
+      return NextResponse.json(
+        { error: "No autorizado. Sesión no encontrada o expirada." },
+        { status: 401 }
+      );
+    }
+
+    const { subsecretarias_ids, areas_ids } = session;
+    if (!subsecretarias_ids?.length && !areas_ids?.length) {
+      return NextResponse.json({ movimientos: [], total: 0 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const semestreId = searchParams.get("semestre_id");
+    const filterSub = searchParams.get("subsecretaria_id") || "all";
+    const filterArea = searchParams.get("area_id") || "all";
+    const search = searchParams.get("search") || "";
+    const tipoPersona = searchParams.get("tipo_persona") || "all"; // 'all', 'becario', 'monotributista'
+    const tipoMovimiento = searchParams.get("tipo_movimiento") || "all";
+
+    if (!semestreId) {
+      return NextResponse.json(
+        { error: "semestre_id es requerido" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = await createClient();
+
+    // 1. Fetch semester info
+    const { data: semestre } = await supabase
+      .from("semestres")
+      .select("*")
+      .eq("id", semestreId)
+      .single();
+
+    if (!semestre) {
+      return NextResponse.json({ error: "Semestre no encontrado" }, { status: 404 });
+    }
+
+    // Determine target areas and subsecretarías based on filters
+    let targetSubIds = [...subsecretarias_ids];
+    let targetAreaIds = [...areas_ids];
+
+    // Fetch areas and subsecretarias for names lookup
+    const { data: allSubs } = await supabase.from("subsecretarias").select("id, nombre");
+    const { data: allAreas } = await supabase.from("areas").select("id, nombre, subsecretaria_id");
+    
+    const subNameMap = new Map(allSubs?.map((s) => [s.id, s.nombre]));
+    const areaNameMap = new Map(allAreas?.map((a) => [a.id, a.nombre]));
+    const areaSubMap = new Map(allAreas?.map((a) => [a.id, a.subsecretaria_id]));
+
+    if (filterSub !== "all") {
+      if (!subsecretarias_ids.includes(filterSub)) {
+        return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+      }
+      targetSubIds = [filterSub];
+      targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id))).map((a) => a.id) || [];
+    }
+
+    if (filterArea !== "all") {
+      if (!areas_ids.includes(filterArea)) {
+        const parentSubId = areaSubMap.get(filterArea);
+        if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
+          return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+        }
+      }
+      targetAreaIds = [filterArea];
+      const parentSubId = areaSubMap.get(filterArea);
+      targetSubIds = parentSubId ? [parentSubId] : [];
+    }
+
+    // 2. Fetch all becarios and monotributistas (both active and inactive) in allowed areas to build ID -> Area mapping
+    let becarios: any[] = [];
+    let monotributistas: any[] = [];
+
+    if (semestre.bloqueado) {
+      const { data: snap } = await supabase
+        .from("snapshots_semestre")
+        .select("nomina_becarios_snapshot, nomina_monos_snapshot")
+        .eq("semestre_id", semestreId)
+        .maybeSingle();
+
+      if (snap) {
+        becarios = snap.nomina_becarios_snapshot || [];
+        monotributistas = snap.nomina_monos_snapshot || [];
+      }
+    } else {
+      let queryFilter = "";
+      if (targetAreaIds.length > 0) {
+        queryFilter += `area_id.in.(${targetAreaIds.join(",")})`;
+      }
+      if (targetSubIds.length > 0) {
+        if (queryFilter) queryFilter += ",";
+        queryFilter += `subsecretaria_id.in.(${targetSubIds.join(",")})`;
+      }
+
+      if (queryFilter) {
+        const { data: becs } = await supabase.from("becarios").select("*").or(queryFilter);
+        const { data: monos } = await supabase.from("monotributistas").select("*").or(queryFilter);
+        becarios = becs || [];
+        monotributistas = monos || [];
+      }
+    }
+
+    // Build map of allowed agent details
+    const agentMap: Record<string, { nombre: string; area_id: string; subsecretaria_id: string }> = {};
+
+    becarios.forEach((b) => {
+      // Check if it belongs to filtered areas
+      if (targetAreaIds.includes(b.area_id) || targetSubIds.includes(b.subsecretaria_id)) {
+        agentMap[b.id] = {
+          nombre: b.apellido_nombre,
+          area_id: b.area_id,
+          subsecretaria_id: b.subsecretaria_id,
+        };
+      }
+    });
+
+    monotributistas.forEach((m) => {
+      if (targetAreaIds.includes(m.area_id) || targetSubIds.includes(m.subsecretaria_id)) {
+        agentMap[m.id] = {
+          nombre: m.apellido_nombre,
+          area_id: m.area_id,
+          subsecretaria_id: m.subsecretaria_id,
+        };
+      }
+    });
+
+    const allowedAgentIds = Object.keys(agentMap);
+    if (allowedAgentIds.length === 0) {
+      return NextResponse.json({ movimientos: [], total: 0 });
+    }
+
+    // 3. Fetch movements for these agents in the semester's year
+    const { data: movs, error: movsErr } = await supabase
+      .from("movimientos")
+      .select("*")
+      .eq("anio", semestre.anio)
+      .in("persona_id", allowedAgentIds)
+      .order("created_at", { ascending: false });
+
+    if (movsErr) {
+      return NextResponse.json({ error: movsErr.message }, { status: 500 });
+    }
+
+    // 4. Filter and map movements in memory
+    let filtered = (movs || []).map((m) => {
+      const agent = agentMap[m.persona_id];
+      return {
+        ...m,
+        nombre_persona: agent ? agent.nombre : "Desconocido",
+        subsecretaria_nombre: agent ? (subNameMap.get(agent.subsecretaria_id) || "-") : "-",
+        area_nombre: agent ? (areaNameMap.get(agent.area_id) || "-") : "-",
+      };
+    });
+
+    // Apply filters
+    if (tipoPersona !== "all") {
+      filtered = filtered.filter((m) => m.tipo_persona === tipoPersona);
+    }
+
+    if (tipoMovimiento !== "all") {
+      filtered = filtered.filter((m) => m.tipo_movimiento === tipoMovimiento);
+    }
+
+    if (search.trim() !== "") {
+      const q = search.toLowerCase().trim();
+      filtered = filtered.filter(
+        (m) =>
+          m.nombre_persona.toLowerCase().includes(q) ||
+          m.descripcion?.toLowerCase().includes(q)
+      );
+    }
+
+    return NextResponse.json({
+      movimientos: filtered,
+      total: filtered.length,
+    });
+  } catch (error: any) {
+    console.error("Portal Movimientos API Error:", error);
+    return NextResponse.json(
+      { error: "Error interno del servidor" },
+      { status: 500 }
+    );
+  }
+}

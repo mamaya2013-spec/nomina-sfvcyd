@@ -74,6 +74,161 @@ export default function ResponsablesConfigPage() {
   // React Table Sorting
   const [sorting, setSorting] = useState<SortingState>([]);
 
+  // Portal Access States
+  const [portalCreds, setPortalCreds] = useState<any[]>([]);
+  const [drawerTab, setDrawerTab] = useState<"general" | "portal">("general");
+  const [selectedRespCreds, setSelectedRespCreds] = useState<any | null>(null);
+  const [loadingCreds, setLoadingCreds] = useState(false);
+  const [newPortalUsername, setNewPortalUsername] = useState("");
+  const [newPortalPassword, setNewPortalPassword] = useState("");
+  const [showPortalPassword, setShowPortalPassword] = useState(false);
+
+  const suggestUsername = (name: string) => {
+    if (!name) return "";
+    const clean = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remove accents
+    const parts = clean.split(" ").filter(p => p.length > 0);
+    if (parts.length >= 2) {
+      return `${parts[0].charAt(0)}${parts[parts.length - 1]}`;
+    }
+    return parts[0] || "";
+  };
+
+  const fetchPortalCreds = async () => {
+    try {
+      const res = await fetch("/api/portal/credenciales");
+      if (res.ok) {
+        const data = await res.json();
+        setPortalCreds(data.credenciales || []);
+      }
+    } catch (e) {
+      console.error("Error fetching portal creds:", e);
+    }
+  };
+
+  const loadRespCreds = async (respId: string) => {
+    setLoadingCreds(true);
+    try {
+      const res = await fetch(`/api/portal/credenciales?responsable_id=${respId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedRespCreds(data.credenciales || null);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingCreds(false);
+    }
+  };
+
+  const generateRandomPassword = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*";
+    let pass = "";
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewPortalPassword(pass);
+  };
+
+  const handleCreatePortalAccess = async () => {
+    if (!newPortalUsername || newPortalUsername.trim() === "") {
+      toast.error("El nombre de usuario es requerido");
+      return;
+    }
+    if (!newPortalPassword || newPortalPassword.length < 6) {
+      toast.error("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+    try {
+      const res = await fetch("/api/portal/credenciales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responsable_id: selectedResp.id,
+          username: newPortalUsername.trim().toLowerCase(),
+          password: newPortalPassword,
+          activo: true,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Acceso al portal habilitado con éxito");
+        setNewPortalPassword("");
+        loadRespCreds(selectedResp.id);
+        fetchPortalCreds();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Error al otorgar acceso");
+      }
+    } catch (e) {
+      toast.error("Error al habilitar acceso");
+    }
+  };
+
+  const handleTogglePortalActive = async () => {
+    if (!selectedRespCreds) return;
+    try {
+      const res = await fetch("/api/portal/credenciales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responsable_id: selectedResp.id,
+          username: selectedRespCreds.username,
+          activo: !selectedRespCreds.activo,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Estado de acceso actualizado");
+        loadRespCreds(selectedResp.id);
+        fetchPortalCreds();
+      }
+    } catch (e) {
+      toast.error("Error al actualizar estado");
+    }
+  };
+
+  const handleResetPortalPassword = async () => {
+    if (!newPortalPassword || newPortalPassword.length < 6) {
+      toast.error("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+    try {
+      const res = await fetch("/api/portal/credenciales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responsable_id: selectedResp.id,
+          username: selectedRespCreds.username,
+          password: newPortalPassword,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Contraseña restablecida con éxito");
+        setNewPortalPassword("");
+        loadRespCreds(selectedResp.id);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Error al restablecer contraseña");
+      }
+    } catch (e) {
+      toast.error("Error al restablecer contraseña");
+    }
+  };
+
+  const handleDeletePortalAccess = async () => {
+    if (!confirm("¿Está seguro de quitar el acceso al portal para este responsable?")) return;
+    try {
+      const res = await fetch(`/api/portal/credenciales?responsable_id=${selectedResp.id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Acceso al portal eliminado");
+        setSelectedRespCreds(null);
+        fetchPortalCreds();
+      }
+    } catch (e) {
+      toast.error("Error al eliminar acceso");
+    }
+  };
+
   // Fetch data
   const fetchData = async () => {
     setLoading(true);
@@ -95,6 +250,7 @@ export default function ResponsablesConfigPage() {
       setResponsables(resps || []);
       setSubsecretarias((subs || []).sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setAreas((ars || []).sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      await fetchPortalCreds();
     } catch (err: any) {
       toast.error("Error al cargar responsables: " + err.message);
     } finally {
@@ -168,6 +324,11 @@ export default function ResponsablesConfigPage() {
   // Setup edit form
   const handleEditClick = (resp: any) => {
     setSelectedResp(resp);
+    setDrawerTab("general");
+    setSelectedRespCreds(null);
+    setNewPortalPassword("");
+    setNewPortalUsername(suggestUsername(resp.nombre_completo));
+    loadRespCreds(resp.id);
     reset({
       nombre_completo: resp.nombre_completo,
       dni: resp.dni,
@@ -543,12 +704,23 @@ export default function ResponsablesConfigPage() {
       {
         accessorKey: "nombre_completo",
         header: "Nombre y DNI",
-        cell: (info) => (
-          <div className={styles.nameCell}>
-            <span className={styles.fullName}>{info.getValue() as string}</span>
-            <span className={styles.dniLabel}>DNI: {info.row.original.dni}</span>
-          </div>
-        ),
+        cell: (info) => {
+          const resp = info.row.original;
+          const hasPortal = portalCreds.some((c) => c.responsable_id === resp.id);
+          return (
+            <div className={styles.nameCell}>
+              <span className={styles.fullName}>
+                {info.getValue() as string}
+                {hasPortal && (
+                  <span title="Tiene acceso al portal de responsables" style={{ marginLeft: "8px", cursor: "help" }}>
+                    🔑
+                  </span>
+                )}
+              </span>
+              <span className={styles.dniLabel}>DNI: {resp.dni}</span>
+            </div>
+          );
+        },
       },
       {
         accessorKey: "cargo",
@@ -666,7 +838,7 @@ export default function ResponsablesConfigPage() {
         },
       },
     ],
-    [subsecretarias, areas]
+    [subsecretarias, areas, portalCreds]
   );
 
   const table = useReactTable({
@@ -1055,196 +1227,379 @@ export default function ResponsablesConfigPage() {
       </Drawer>
 
       {/* Drawer: Editar Responsable */}
+      {/* Drawer: Editar Responsable */}
       <Drawer
         isOpen={isEditOpen}
         onClose={() => setIsEditOpen(false)}
         title="Editar Datos de Responsable"
         size="md"
       >
-        <form onSubmit={onEditFormSubmit} className={styles.drawerForm}>
-          <div className={styles.formSection}>
-            <div className={styles.formGroup}>
-              <label>Nombre Completo *</label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Ej. Juan Pérez"
-                {...register("nombre_completo")}
-              />
-              {errors.nombre_completo && (
-                <span className={styles.formError}>{errors.nombre_completo.message}</span>
-              )}
-            </div>
+        <div className={styles.drawerTabs}>
+          <button
+            type="button"
+            className={`${styles.drawerTabBtn} ${drawerTab === "general" ? styles.active : ""}`}
+            onClick={() => setDrawerTab("general")}
+          >
+            Datos Generales
+          </button>
+          <button
+            type="button"
+            className={`${styles.drawerTabBtn} ${drawerTab === "portal" ? styles.active : ""}`}
+            onClick={() => setDrawerTab("portal")}
+          >
+            Acceso al Portal
+          </button>
+        </div>
 
-            <div className={styles.formGroup}>
-              <label>DNI *</label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Ej. 35123456"
-                {...register("dni")}
-              />
-              {errors.dni && <span className={styles.formError}>{errors.dni.message}</span>}
-            </div>
-
-            <div className={styles.formRow}>
+        {drawerTab === "general" ? (
+          <form onSubmit={onEditFormSubmit} className={styles.drawerForm}>
+            <div className={styles.formSection}>
               <div className={styles.formGroup}>
-                <label>Teléfono</label>
+                <label>Nombre Completo *</label>
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="Ej. 3515556677"
-                  {...register("telefono")}
+                  placeholder="Ej. Juan Pérez"
+                  {...register("nombre_completo")}
                 />
-                {errors.telefono && (
-                  <span className={styles.formError}>{errors.telefono.message}</span>
+                {errors.nombre_completo && (
+                  <span className={styles.formError}>{errors.nombre_completo.message}</span>
                 )}
               </div>
 
               <div className={styles.formGroup}>
-                <label>Email</label>
+                <label>DNI *</label>
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="Ej. juan.perez@example.com"
-                  {...register("email")}
+                  placeholder="Ej. 35123456"
+                  {...register("dni")}
                 />
-                {errors.email && <span className={styles.formError}>{errors.email.message}</span>}
+                {errors.dni && <span className={styles.formError}>{errors.dni.message}</span>}
               </div>
-            </div>
 
-            <div className={styles.formGroup}>
-              <label>Cargo / Función</label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Ej. Director de Deportes"
-                {...register("cargo")}
-              />
-              {errors.cargo && <span className={styles.formError}>{errors.cargo.message}</span>}
-            </div>
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label>Teléfono</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Ej. 3515556677"
+                    {...register("telefono")}
+                  />
+                  {errors.telefono && (
+                    <span className={styles.formError}>{errors.telefono.message}</span>
+                  )}
+                </div>
 
-            <div className={styles.formGroup}>
-              <label>Subsecretarías Organizativas *</label>
-              <Controller
-                control={control}
-                name="subsecretarias_ids"
-                render={({ field }) => (
-                  <div style={{
-                    maxHeight: "150px",
-                    overflowY: "auto",
-                    border: "1px solid rgba(255, 255, 255, 0.1)",
-                    borderRadius: "8px",
-                    padding: "10px",
-                    background: "rgba(255, 255, 255, 0.02)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px"
-                  }}>
-                    {subsecretarias.map((s) => {
-                      const isChecked = field.value?.includes(s.id) || false;
-                      return (
-                        <label key={s.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px" }}>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              const next = e.target.checked
-                                ? [...(field.value || []), s.id]
-                                : (field.value || []).filter((id: string) => id !== s.id);
-                              field.onChange(next);
-                            }}
-                            style={{ cursor: "pointer" }}
-                          />
-                          <span>{s.nombre}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-              />
-              {errors.subsecretarias_ids && (
-                <span className={styles.formError}>{errors.subsecretarias_ids.message}</span>
-              )}
-            </div>
+                <div className={styles.formGroup}>
+                  <label>Email</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Ej. juan.perez@example.com"
+                    {...register("email")}
+                  />
+                  {errors.email && <span className={styles.formError}>{errors.email.message}</span>}
+                </div>
+              </div>
 
-            <div className={styles.formGroup}>
-              <label>Áreas Operativas</label>
-              <Controller
-                control={control}
-                name="areas_ids"
-                render={({ field }) => (
-                  <div style={{
-                    maxHeight: "180px",
-                    overflowY: "auto",
-                    border: "1px solid rgba(255, 255, 255, 0.1)",
-                    borderRadius: "8px",
-                    padding: "10px",
-                    background: "rgba(255, 255, 255, 0.02)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px"
-                  }}>
-                    {selectedSubs.length === 0 ? (
-                      <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)", textAlign: "center", padding: "10px" }}>
-                        Seleccione al menos una subsecretaría para ver sus áreas.
-                      </span>
-                    ) : filteredAreasForForm.length === 0 ? (
-                      <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)", textAlign: "center", padding: "10px" }}>
-                        No hay áreas activas vinculadas a las subsecretarías seleccionadas.
-                      </span>
-                    ) : (
-                      filteredAreasForForm.map((a) => {
-                        const isChecked = field.value?.includes(a.id) || false;
+              <div className={styles.formGroup}>
+                <label>Cargo / Función</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Ej. Director de Deportes"
+                  {...register("cargo")}
+                />
+                {errors.cargo && <span className={styles.formError}>{errors.cargo.message}</span>}
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Subsecretarías Organizativas *</label>
+                <Controller
+                  control={control}
+                  name="subsecretarias_ids"
+                  render={({ field }) => (
+                    <div style={{
+                      maxHeight: "150px",
+                      overflowY: "auto",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      borderRadius: "8px",
+                      padding: "10px",
+                      background: "rgba(255, 255, 255, 0.02)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px"
+                    }}>
+                      {subsecretarias.map((s) => {
+                        const isChecked = field.value?.includes(s.id) || false;
                         return (
-                          <label key={a.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px" }}>
+                          <label key={s.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px" }}>
                             <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={(e) => {
                                 const next = e.target.checked
-                                  ? [...(field.value || []), a.id]
-                                  : (field.value || []).filter((id: string) => id !== a.id);
+                                  ? [...(field.value || []), s.id]
+                                  : (field.value || []).filter((id: string) => id !== s.id);
                                 field.onChange(next);
                               }}
                               style={{ cursor: "pointer" }}
                             />
-                            <div style={{ display: "flex", flexDirection: "column" }}>
-                              <span>{a.nombre}</span>
-                              <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>
-                                ({subsecretarias.find(s => s.id === a.subsecretaria_id)?.nombre || ""})
-                              </span>
-                            </div>
+                            <span>{s.nombre}</span>
                           </label>
                         );
-                      })
-                    )}
-                  </div>
+                      })}
+                    </div>
+                  )}
+                />
+                {errors.subsecretarias_ids && (
+                  <span className={styles.formError}>{errors.subsecretarias_ids.message}</span>
                 )}
-              />
-              {errors.areas_ids && <span className={styles.formError}>{errors.areas_ids.message}</span>}
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Áreas Operativas</label>
+                <Controller
+                  control={control}
+                  name="areas_ids"
+                  render={({ field }) => (
+                    <div style={{
+                      maxHeight: "180px",
+                      overflowY: "auto",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      borderRadius: "8px",
+                      padding: "10px",
+                      background: "rgba(255, 255, 255, 0.02)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px"
+                    }}>
+                      {selectedSubs.length === 0 ? (
+                        <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)", textAlign: "center", padding: "10px" }}>
+                          Seleccione al menos una subsecretaría para ver sus áreas.
+                        </span>
+                      ) : filteredAreasForForm.length === 0 ? (
+                        <span style={{ fontSize: "13px", color: "rgba(255, 255, 255, 0.4)", textAlign: "center", padding: "10px" }}>
+                          No hay áreas activas vinculadas a las subsecretarías seleccionadas.
+                        </span>
+                      ) : (
+                        filteredAreasForForm.map((a) => {
+                          const isChecked = field.value?.includes(a.id) || false;
+                          return (
+                            <label key={a.id} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13.5px" }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const next = e.target.checked
+                                    ? [...(field.value || []), a.id]
+                                    : (field.value || []).filter((id: string) => id !== a.id);
+                                  field.onChange(next);
+                                }}
+                                style={{ cursor: "pointer" }}
+                              />
+                              <div style={{ display: "flex", flexDirection: "column" }}>
+                                <span>{a.nombre}</span>
+                                <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.4)" }}>
+                                  ({subsecretarias.find(s => s.id === a.subsecretaria_id)?.nombre || ""})
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                />
+                {errors.areas_ids && <span className={styles.formError}>{errors.areas_ids.message}</span>}
+              </div>
+
+              <div className={styles.formGroup} style={{ flexDirection: "row", gap: "10px", alignItems: "center", marginTop: "10px" }}>
+                <input type="checkbox" id="edit_activo" {...register("activo")} style={{ cursor: "pointer", width: "16px", height: "16px" }} />
+                <label htmlFor="edit_activo" style={{ cursor: "pointer", userSelect: "none" }}>Responsable Activo (Habilitado para asignaciones)</label>
+              </div>
             </div>
 
-            <div className={styles.formGroup} style={{ flexDirection: "row", gap: "10px", alignItems: "center", marginTop: "10px" }}>
-              <input type="checkbox" id="edit_activo" {...register("activo")} style={{ cursor: "pointer", width: "16px", height: "16px" }} />
-              <label htmlFor="edit_activo" style={{ cursor: "pointer", userSelect: "none" }}>Responsable Activo (Habilitado para asignaciones)</label>
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className="input-field"
+                onClick={() => setIsEditOpen(false)}
+                style={{ cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
+              <button type="submit" className={styles.primaryBtn}>
+                Guardar Cambios
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className={styles.drawerForm}>
+            {loadingCreds ? (
+              <div className={styles.loadingSpinner}>
+                <span className={styles.spin}>⏳</span>
+                <span>Cargando credenciales...</span>
+              </div>
+            ) : selectedRespCreds ? (
+              <div className={styles.formSection}>
+                <div className={styles.portalCredsContainer}>
+                  <div className={styles.portalCredsHeader}>Credenciales Activas</div>
+                  
+                  <div className={styles.portalCredsRow}>
+                    <span className={styles.portalCredsLabel}>Nombre de Usuario:</span>
+                    <span className={styles.portalCredsValue}>{selectedRespCreds.username}</span>
+                  </div>
+
+                  <div className={styles.portalCredsRow}>
+                    <span className={styles.portalCredsLabel}>Estado de Acceso:</span>
+                    <span style={{ 
+                      fontSize: "12px", 
+                      fontWeight: "bold",
+                      color: selectedRespCreds.activo ? "#10b981" : "#ef4444",
+                      background: selectedRespCreds.activo ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
+                      padding: "4px 8px",
+                      borderRadius: "4px"
+                    }}>
+                      {selectedRespCreds.activo ? "Activo" : "Inactivo"}
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+                    <button
+                      type="button"
+                      className={styles.secondaryActionBtn}
+                      onClick={handleTogglePortalActive}
+                    >
+                      {selectedRespCreds.activo ? "Desactivar Acceso" : "Activar Acceso"}
+                    </button>
+                    
+                    <button
+                      type="button"
+                      className={styles.dangerActionBtn}
+                      onClick={handleDeletePortalAccess}
+                      style={{ marginLeft: "auto" }}
+                    >
+                      Eliminar Acceso
+                    </button>
+                  </div>
+                </div>
+
+                <div className={styles.portalCredsContainer} style={{ marginTop: "16px" }}>
+                  <div className={styles.portalCredsHeader}>Restablecer Contraseña</div>
+                  
+                  <div className={styles.formGroup}>
+                    <label>Nueva Contraseña (mínimo 6 caracteres)</label>
+                    <div className={styles.inputGroupWithBtn}>
+                      <input
+                        type={showPortalPassword ? "text" : "password"}
+                        className="input-field"
+                        placeholder="Ej. NuevaContraseña123"
+                        value={newPortalPassword}
+                        onChange={(e) => setNewPortalPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className={styles.secondaryActionBtn}
+                        onClick={() => setShowPortalPassword(!showPortalPassword)}
+                      >
+                        {showPortalPassword ? "Ocultar" : "Mostrar"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                    <button
+                      type="button"
+                      className={styles.secondaryActionBtn}
+                      onClick={generateRandomPassword}
+                    >
+                      Generar Aleatoria
+                    </button>
+                    
+                    <button
+                      type="button"
+                      className={styles.primaryBtn}
+                      onClick={handleResetPortalPassword}
+                      style={{ marginLeft: "auto" }}
+                    >
+                      Actualizar Contraseña
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.formSection}>
+                <div className={styles.portalCredsContainer}>
+                  <div className={styles.portalCredsHeader}>Crear Acceso al Portal</div>
+                  
+                  <div className={styles.formGroup}>
+                    <label>Nombre de Usuario *</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Ej. j_perez"
+                      value={newPortalUsername}
+                      onChange={(e) => setNewPortalUsername(e.target.value)}
+                    />
+                  </div>
+
+                  <div className={styles.formGroup} style={{ marginTop: "12px" }}>
+                    <label>Contraseña * (mínimo 6 caracteres)</label>
+                    <div className={styles.inputGroupWithBtn}>
+                      <input
+                        type={showPortalPassword ? "text" : "password"}
+                        className="input-field"
+                        placeholder="Ej. ContraseñaSegura123"
+                        value={newPortalPassword}
+                        onChange={(e) => setNewPortalPassword(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className={styles.secondaryActionBtn}
+                        onClick={() => setShowPortalPassword(!showPortalPassword)}
+                      >
+                        {showPortalPassword ? "Ocultar" : "Mostrar"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+                    <button
+                      type="button"
+                      className={styles.secondaryActionBtn}
+                      onClick={generateRandomPassword}
+                    >
+                      Generar Aleatoria
+                    </button>
+                    
+                    <button
+                      type="button"
+                      className={styles.primaryBtn}
+                      onClick={handleCreatePortalAccess}
+                      style={{ marginLeft: "auto" }}
+                    >
+                      Habilitar Acceso
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className="input-field"
+                onClick={() => setIsEditOpen(false)}
+                style={{ cursor: "pointer" }}
+              >
+                Cerrar
+              </button>
             </div>
           </div>
-
-          <div className={styles.formActions}>
-            <button
-              type="button"
-              className="input-field"
-              onClick={() => setIsEditOpen(false)}
-              style={{ cursor: "pointer" }}
-            >
-              Cancelar
-            </button>
-            <button type="submit" className={styles.primaryBtn}>
-              Guardar Cambios
-            </button>
-          </div>
-        </form>
+        )}
       </Drawer>
     </div>
   );
