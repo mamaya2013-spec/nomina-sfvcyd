@@ -45,6 +45,7 @@ const menuItems: MenuItem[] = [
   { name: "Movimientos", path: "/portal/movimientos", icon: Activity },
   { name: "Campañas y Docs", path: "/portal/campanas", icon: FolderOpen },
   { name: "Analíticas", path: "/portal/analiticas", icon: BarChart3 },
+  { name: "Categorías y Montos", path: "/portal/montos", icon: Layers },
 ];
 
 export default function PortalLayoutClient({ children }: { children: React.ReactNode }) {
