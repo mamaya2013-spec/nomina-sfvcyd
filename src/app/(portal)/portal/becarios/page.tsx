@@ -30,10 +30,8 @@ import { usePortalAuth } from "@/lib/contexts/PortalAuthContext";
 import Drawer from "@/components/ui/Drawer";
 import styles from "./becarios.module.css";
 
-// XLSX and jsPDF dynamic imports or direct imports
+// XLSX dynamic imports or direct imports
 import * as XLSX from "xlsx";
-import { jsPDF } from "jspdf";
-import "jspdf-autotable";
 
 interface Becario {
   id: string;
@@ -273,7 +271,10 @@ export default function PortalBecariosPage() {
   };
 
   // PDF Export
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
+    const { default: jsPDF } = await import("jspdf");
+    const { applyPlugin } = await import("jspdf-autotable");
+    applyPlugin(jsPDF);
     const doc = new jsPDF();
     const activeSemName = selectedSemester?.nombre_display || "Historial";
     

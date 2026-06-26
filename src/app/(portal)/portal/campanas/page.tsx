@@ -27,8 +27,6 @@ import { usePortalAuth } from "@/lib/contexts/PortalAuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import styles from "./campanas.module.css";
 import * as XLSX from "xlsx";
-import { jsPDF } from "jspdf";
-import "jspdf-autotable";
 
 interface Campaign {
   id: string;
@@ -309,8 +307,11 @@ export default function PortalCampanasPage() {
   };
 
   // PDF Export Campaign Details
-  const exportCampaignPDF = () => {
+  const exportCampaignPDF = async () => {
     if (!campaignDetail) return;
+    const { default: jsPDF } = await import("jspdf");
+    const { applyPlugin } = await import("jspdf-autotable");
+    applyPlugin(jsPDF);
     const doc = new jsPDF();
 
     doc.setFillColor(15, 23, 42);

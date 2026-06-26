@@ -30,10 +30,8 @@ import { usePortalAuth } from "@/lib/contexts/PortalAuthContext";
 import Drawer from "@/components/ui/Drawer";
 import styles from "./monotributistas.module.css";
 
-// XLSX and jsPDF
+// XLSX dynamic imports or direct imports
 import * as XLSX from "xlsx";
-import { jsPDF } from "jspdf";
-import "jspdf-autotable";
 
 interface Monotributista {
   id: string;
@@ -311,7 +309,10 @@ export default function PortalMonotributistasPage() {
   };
 
   // PDF Export
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
+    const { default: jsPDF } = await import("jspdf");
+    const { applyPlugin } = await import("jspdf-autotable");
+    applyPlugin(jsPDF);
     const doc = new jsPDF();
     const activeSemName = selectedSemester?.nombre_display || "Historial";
     

@@ -233,6 +233,7 @@
   padding: 3px 8px;
   border-radius: 6px;
   width: fit-content;
+  white-space: nowrap;
 }
 
 .legajoOk {

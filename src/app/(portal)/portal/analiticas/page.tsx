@@ -35,8 +35,6 @@ import {
   Line,
 } from "recharts";
 import styles from "./analiticas.module.css";
-import { jsPDF } from "jspdf";
-import "jspdf-autotable";
 
 type TabType = "personal" | "financiero" | "documentos" | "calendar";
 
@@ -156,8 +154,11 @@ export default function PortalAnaliticasPage() {
   }, [currentDate]);
 
   // jsPDF Executive Report generator
-  const exportExecutivePDF = () => {
+  const exportExecutivePDF = async () => {
     if (!analyticsData) return;
+    const { default: jsPDF } = await import("jspdf");
+    const { applyPlugin } = await import("jspdf-autotable");
+    applyPlugin(jsPDF);
     const doc = new jsPDF();
     const activeSemName = selectedSemester?.nombre_display || "Historial";
 
