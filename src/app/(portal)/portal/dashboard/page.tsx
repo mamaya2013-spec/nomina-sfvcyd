@@ -182,19 +182,34 @@ export default function PortalDashboardPage() {
         >
           {(() => {
             const ocsList = dashboardData?.ocs || [];
+            const proyMap = dashboardData?.proyecciones || {};
+
             const totalAssigned = ocsList.reduce((sum: number, o: any) => sum + Number(o.monto_asignado || 0), 0);
             const totalExecuted = ocsList.reduce((sum: number, o: any) => sum + Number(o.monto_ejecutado || 0), 0);
             const totalRemaining = totalAssigned - totalExecuted;
-            const progress = totalAssigned > 0 ? (totalExecuted / totalAssigned) * 100 : 0;
+            
+            // Calculate projections
+            let totalCostoMensual = 0;
+            let totalProyectadoRestante = 0;
 
-            // Determine health status
-            let statusText = "Presupuesto Saludable";
+            ["becas", "activa_becas", "monotributos", "activa_monotributos"].forEach((tipo) => {
+              const proj = proyMap[tipo] || { costo_mensual: 0, meses_restantes: 0 };
+              totalCostoMensual += Number(proj.costo_mensual || 0);
+              totalProyectadoRestante += Number(proj.costo_mensual || 0) * Number(proj.meses_restantes || 0);
+            });
+
+            const totalProjected = totalExecuted + totalProyectadoRestante;
+            const balanceProjected = totalAssigned - totalProjected;
+            const progress = totalAssigned > 0 ? (totalProjected / totalAssigned) * 100 : 0;
+
+            // Determine health status based on projection
+            let statusText = "Proyección Saludable";
             let statusClass = styles.financeStatusOk;
-            if (progress >= 95 || totalRemaining < 0) {
-              statusText = "Excedido / Límite Crítico";
+            if (progress >= 95 || balanceProjected < 0) {
+              statusText = "Riesgo de Sobregiro Semestral";
               statusClass = styles.financeStatusDanger;
             } else if (progress >= 80) {
-              statusText = "Alerta de Partida Límite";
+              statusText = "Alerta: Presupuesto Ajustado";
               statusClass = styles.financeStatusWarning;
             }
 
@@ -219,10 +234,10 @@ export default function PortalDashboardPage() {
                 <div className={styles.financeHeader}>
                   <div className={styles.financeTitle}>
                     <DollarSign size={20} className="text-emerald" />
-                    <span>Control Presupuestario de Partidas</span>
+                    <span>Control y Proyección Presupuestaria</span>
                   </div>
                   <span className={statusClass}>
-                    {statusText} ({progress.toFixed(1)}%)
+                    {statusText} (Proy: {progress.toFixed(1)}%)
                   </span>
                 </div>
 
@@ -243,14 +258,26 @@ export default function PortalDashboardPage() {
                       />
                     </div>
 
-                    <div className={styles.budgetSummaryStats}>
-                      <span className="text-secondary">
-                        Ejecutado: <strong>{totalExecuted.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
-                      </span>
-                      <span className={totalRemaining >= 0 ? "text-emerald" : "text-rose"}>
-                        {totalRemaining >= 0 ? "Disponible: " : "Sobregiro: "}
-                        <strong>{Math.abs(totalRemaining).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
-                      </span>
+                    <div className={styles.budgetSummaryStats} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: "12px" }}>
+                        <span className="text-secondary">Ejecutado Real (al día):</span>
+                        <strong className="text-primary">{totalExecuted.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: "12px" }}>
+                        <span className="text-secondary">Costo Mensual Actual:</span>
+                        <strong className="text-primary">{totalCostoMensual.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}/mes</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: "12px" }}>
+                        <span className="text-secondary">Proyección Fin de Semestre:</span>
+                        <strong className="text-purple">{totalProjected.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: "12px", borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: "6px", marginTop: "4px" }}>
+                        <span className="text-secondary">Disponible Proyectado:</span>
+                        <strong className={balanceProjected >= 0 ? "text-emerald" : "text-rose"}>
+                          {balanceProjected >= 0 ? "Sobrante: " : "Faltante: "}
+                          {balanceProjected >= 0 ? "+" : ""}{balanceProjected.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+                        </strong>
+                      </div>
                     </div>
                   </div>
 
@@ -262,10 +289,14 @@ export default function PortalDashboardPage() {
                         monto_ejecutado: 0,
                         numero_oc: "N/A"
                       };
+                      const proj = proyMap[tipo] || { costo_mensual: 0, meses_restantes: 0 };
                       const assigned = Number(oc.monto_asignado);
                       const executed = Number(oc.monto_ejecutado);
-                      const remaining = assigned - executed;
-                      const pct = assigned > 0 ? (executed / assigned) * 100 : 0;
+                      const monthly = Number(proj.costo_mensual);
+                      const remainingMonths = Number(proj.meses_restantes);
+                      const projectedTotal = executed + (monthly * remainingMonths);
+                      const balance = assigned - projectedTotal;
+                      const pct = assigned > 0 ? (projectedTotal / assigned) * 100 : 0;
 
                       return (
                         <div key={tipo} className={styles.financeDetailItem}>
@@ -284,11 +315,18 @@ export default function PortalDashboardPage() {
                             />
                           </div>
 
-                          <div className={styles.financeDetailSub}>
-                            <span>Ejec: {pct.toFixed(0)}%</span>
-                            <span className={remaining >= 0 ? "text-emerald" : "text-rose"}>
-                              Disp: {remaining.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
-                            </span>
+                          <div className={styles.financeDetailSub} style={{ flexDirection: "column", gap: "2px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                              <span>Costo: {monthly.toLocaleString("es-AR", { maximumFractionDigits: 0 })}/mes</span>
+                              <span>Proy: {pct.toFixed(0)}%</span>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", width: "100%", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "2px", marginTop: "2px" }}>
+                              <span>Total Proy: {projectedTotal.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</span>
+                              <strong className={balance >= 0 ? "text-emerald" : "text-rose"}>
+                                {balance >= 0 ? "Disp: " : "Falta: "}
+                                {Math.abs(balance).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                              </strong>
+                            </div>
                           </div>
                         </div>
                       );

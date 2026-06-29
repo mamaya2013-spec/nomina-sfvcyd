@@ -413,6 +413,55 @@ export async function GET(req: NextRequest) {
     const personalDiffPct = prevPersonal > 0 ? Math.round((personalDiff / prevPersonal) * 100) : 0;
     const costDiffPct = prevCost > 0 ? Math.round((costDiff / prevCost) * 100) : 0;
 
+    // --- Proyecciones Presupuestarias para el Secretario ---
+    const numSemestre = semestre?.numero_semestre || 1;
+    const monthsOfSemester = numSemestre === 1 ? [1, 2, 3, 4, 5, 6] : [7, 8, 9, 10, 11, 12];
+
+    const { data: liquidatedMonthsData } = await supabase
+      .from("liquidaciones_mensuales")
+      .select("mes")
+      .eq("semestre_id", semestreId)
+      .in("estado_liquidacion", ["procesada", "pagada"]);
+
+    const uniqueLiquidatedMonths = Array.from(
+      new Set((liquidatedMonthsData || []).map((l) => l.mes))
+    );
+
+    const remainingMonths = semestre?.bloqueado
+      ? []
+      : monthsOfSemester.filter((m) => !uniqueLiquidatedMonths.includes(m));
+    const qtyRemainingMonths = remainingMonths.length;
+
+    const monthlyCost = {
+      becas: (activeBecarios || []).reduce((sum, b) => sum + Number(b.importe_mensual_beca || 0), 0),
+      monotributos: (activeMonotributistas || []).reduce((sum, m) => sum + Number(m.importe_mensual_monotributo || 0), 0),
+      activa_becas: (activeBecarios || []).reduce((sum, b) => sum + Number(b.importe_tarjeta_activa || 0), 0),
+      activa_monotributos: (activeMonotributistas || []).reduce((sum, m) => sum + Number(m.importe_tarjeta_activa || 0), 0),
+    };
+
+    const projectionsMap = {
+      becas: {
+        costo_mensual: Math.round(monthlyCost.becas * 100) / 100,
+        meses_restantes: qtyRemainingMonths,
+        meses_restantes_list: remainingMonths,
+      },
+      monotributos: {
+        costo_mensual: Math.round(monthlyCost.monotributos * 100) / 100,
+        meses_restantes: qtyRemainingMonths,
+        meses_restantes_list: remainingMonths,
+      },
+      activa_becas: {
+        costo_mensual: Math.round(monthlyCost.activa_becas * 100) / 100,
+        meses_restantes: qtyRemainingMonths,
+        meses_restantes_list: remainingMonths,
+      },
+      activa_monotributos: {
+        costo_mensual: Math.round(monthlyCost.activa_monotributos * 100) / 100,
+        meses_restantes: qtyRemainingMonths,
+        meses_restantes_list: remainingMonths,
+      },
+    };
+
     // Response object
     return NextResponse.json({
       metrics: {
@@ -438,6 +487,7 @@ export async function GET(req: NextRequest) {
       recentActivity,
       alertsList,
       ocs: ocs || [],
+      proyecciones: projectionsMap,
     });
   } catch (error: any) {
     console.error("Portal Dashboard API Error:", error);
