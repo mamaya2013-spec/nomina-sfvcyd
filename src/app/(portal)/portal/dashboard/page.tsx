@@ -316,28 +316,36 @@ export default function PortalDashboardPage() {
                             <span>{getOcName(tipo)}</span>
                             <span className="text-muted">OC #{oc.numero_oc}</span>
                           </div>
-                          <h5 className={styles.financeDetailValue}>
-                            {assigned.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
-                          </h5>
+
+                          {/* Highlighted projected available balance */}
+                          <div style={{ marginTop: "2px" }}>
+                            <span style={{ fontSize: "9px", color: "#94a3b8", textTransform: "uppercase", fontWeight: "600", letterSpacing: "0.03em" }}>
+                              Disponible Proyectado:
+                            </span>
+                            <h5 className={`${styles.financeDetailValue} ${balance >= 0 ? styles.textEmerald : styles.textRose}`} style={{ fontSize: "19px", marginTop: "1px", fontWeight: "800" }}>
+                              {balance >= 0 ? "+" : ""}{balance.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+                            </h5>
+                          </div>
                           
-                          <div className={styles.budgetProgressBar} style={{ height: "4px" }}>
+                          <div className={styles.budgetProgressBar} style={{ height: "4px", marginTop: "2px" }}>
                             <div
                               className={`${styles.budgetProgressBarFill} ${getOcColor(pct)}`}
                               style={{ width: `${Math.min(pct, 100)}%` }}
                             />
                           </div>
 
-                          <div className={styles.financeDetailSub} style={{ flexDirection: "column", gap: "2px" }}>
+                          <div className={styles.financeDetailSub} style={{ display: "flex", flexDirection: "column", gap: "3px", fontSize: "11px", marginTop: "4px" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                              <span>Costo: {monthly.toLocaleString("es-AR", { maximumFractionDigits: 0 })}/mes</span>
-                              <span>Proy: {pct.toFixed(0)}%</span>
+                              <span className="text-secondary">Asignado (OC):</span>
+                              <strong className="text-primary">{assigned.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</strong>
                             </div>
-                            <div style={{ display: "flex", justifyContent: "space-between", width: "100%", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "2px", marginTop: "2px" }}>
-                              <span>Total Proy: {projectedTotal.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</span>
-                              <strong className={balance >= 0 ? "text-emerald" : "text-rose"}>
-                                {balance >= 0 ? "Disp: " : "Falta: "}
-                                {Math.abs(balance).toLocaleString("es-AR", { maximumFractionDigits: 0 })}
-                              </strong>
+                            <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                              <span className="text-secondary">Proyectado Semestre:</span>
+                              <strong className="text-purple">{projectedTotal.toLocaleString("es-AR", { maximumFractionDigits: 0 })}</strong>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", width: "100%", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "3px", marginTop: "1px" }}>
+                              <span className="text-secondary">Costo Mensual Actual:</span>
+                              <strong className="text-primary">{monthly.toLocaleString("es-AR", { maximumFractionDigits: 0 })}/mes</strong>
                             </div>
                           </div>
                         </div>
