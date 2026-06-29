@@ -251,6 +251,29 @@ export default function PortalDashboardPage() {
                       </h4>
                     </div>
 
+                    {/* Proyecciones Destacadas (Muy visibles) */}
+                    <div className={styles.projectionHighlights}>
+                      <div className={styles.projHighItem}>
+                        <span className={styles.projHighLabel}>Disponible Proyectado</span>
+                        <span className={`${styles.projHighValue} ${balanceProjected >= 0 ? styles.textEmerald : styles.textRose}`}>
+                          {balanceProjected >= 0 ? "+" : ""}{balanceProjected.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+                        </span>
+                        <span className={styles.projHighSub}>
+                          {balanceProjected >= 0 ? "Sobrante estimado al cierre" : "Déficit estimado al cierre"}
+                        </span>
+                      </div>
+
+                      <div className={styles.projHighItem}>
+                        <span className={styles.projHighLabel}>Proyección Fin de Semestre</span>
+                        <span className={styles.projHighValueSmall}>
+                          {totalProjected.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+                        </span>
+                        <span className={styles.projHighSub}>
+                          Gasto semestral estimado
+                        </span>
+                      </div>
+                    </div>
+
                     <div className={styles.budgetProgressBar}>
                       <div
                         className={`${styles.budgetProgressBarFill} ${getOcColor(progress)}`}
@@ -266,17 +289,6 @@ export default function PortalDashboardPage() {
                       <div style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: "12px" }}>
                         <span className="text-secondary">Costo Mensual Actual:</span>
                         <strong className="text-primary">{totalCostoMensual.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}/mes</strong>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: "12px" }}>
-                        <span className="text-secondary">Proyección Fin de Semestre:</span>
-                        <strong className="text-purple">{totalProjected.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", width: "100%", fontSize: "12px", borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: "6px", marginTop: "4px" }}>
-                        <span className="text-secondary">Disponible Proyectado:</span>
-                        <strong className={balanceProjected >= 0 ? "text-emerald" : "text-rose"}>
-                          {balanceProjected >= 0 ? "Sobrante: " : "Faltante: "}
-                          {balanceProjected >= 0 ? "+" : ""}{balanceProjected.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
-                        </strong>
                       </div>
                     </div>
                   </div>
