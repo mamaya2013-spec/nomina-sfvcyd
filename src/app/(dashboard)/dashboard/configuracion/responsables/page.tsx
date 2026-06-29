@@ -40,13 +40,19 @@ const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-
 
 const formSchema = z.object({
   nombre_completo: z.string().min(3, "Mínimo 3 caracteres"),
-  dni: z.string().regex(/^\d{7,8}$/, "DNI debe tener 7 u 8 dígitos numéricos"),
+  dni: z.string().regex(/^(\d{7,8}|0+)$/, "DNI debe tener 7 u 8 dígitos numéricos o ceros"),
   telefono: z.string().or(z.literal("")).nullable().optional(),
   email: z.string().email("Email inválido").or(z.literal("")).nullable().optional(),
-  subsecretarias_ids: z.array(z.string().regex(uuidRegex, "UUID inválido")).min(1, "Seleccione al menos una subsecretaría"),
+  subsecretarias_ids: z.array(z.string().regex(uuidRegex, "UUID inválido")),
   areas_ids: z.array(z.string().regex(uuidRegex, "UUID inválido")),
   cargo: z.string().or(z.literal("")).nullable().optional(),
   activo: z.boolean(),
+}).refine((data) => {
+  if (data.cargo === "Secretario") return true;
+  return data.subsecretarias_ids.length > 0;
+}, {
+  message: "Seleccione al menos una subsecretaría",
+  path: ["subsecretarias_ids"],
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -112,6 +118,9 @@ export default function ResponsablesConfigPage() {
       if (res.ok) {
         const data = await res.json();
         setSelectedRespCreds(data.credenciales || null);
+        if (data.credenciales) {
+          setNewPortalUsername(data.credenciales.username);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -160,6 +169,34 @@ export default function ResponsablesConfigPage() {
       }
     } catch (e) {
       toast.error("Error al habilitar acceso");
+    }
+  };
+
+  const handleUpdatePortalUsername = async () => {
+    if (!newPortalUsername || newPortalUsername.trim() === "") {
+      toast.error("El nombre de usuario no puede estar vacío");
+      return;
+    }
+    try {
+      const res = await fetch("/api/portal/credenciales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          responsable_id: selectedResp.id,
+          username: newPortalUsername.trim().toLowerCase(),
+          activo: selectedRespCreds.activo,
+        }),
+      });
+      if (res.ok) {
+        toast.success("Nombre de usuario actualizado con éxito");
+        loadRespCreds(selectedResp.id);
+        fetchPortalCreds();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Error al actualizar el nombre de usuario");
+      }
+    } catch (e) {
+      toast.error("Error al actualizar usuario");
     }
   };
 
@@ -1448,12 +1485,18 @@ export default function ResponsablesConfigPage() {
                 <div className={styles.portalCredsContainer}>
                   <div className={styles.portalCredsHeader}>Credenciales Activas</div>
                   
-                  <div className={styles.portalCredsRow}>
-                    <span className={styles.portalCredsLabel}>Nombre de Usuario:</span>
-                    <span className={styles.portalCredsValue}>{selectedRespCreds.username}</span>
+                  <div className={styles.formGroup}>
+                    <label>Nombre de Usuario</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Ej. secretario"
+                      value={newPortalUsername}
+                      onChange={(e) => setNewPortalUsername(e.target.value)}
+                    />
                   </div>
 
-                  <div className={styles.portalCredsRow}>
+                  <div className={styles.portalCredsRow} style={{ marginTop: "12px" }}>
                     <span className={styles.portalCredsLabel}>Estado de Acceso:</span>
                     <span style={{ 
                       fontSize: "12px", 
@@ -1467,13 +1510,21 @@ export default function ResponsablesConfigPage() {
                     </span>
                   </div>
 
-                  <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+                  <div style={{ marginTop: "16px", display: "flex", gap: "8px" }}>
                     <button
                       type="button"
                       className={styles.secondaryActionBtn}
                       onClick={handleTogglePortalActive}
                     >
                       {selectedRespCreds.activo ? "Desactivar Acceso" : "Activar Acceso"}
+                    </button>
+                    
+                    <button
+                      type="button"
+                      className={styles.primaryBtn}
+                      onClick={handleUpdatePortalUsername}
+                    >
+                      Actualizar Usuario
                     </button>
                     
                     <button
