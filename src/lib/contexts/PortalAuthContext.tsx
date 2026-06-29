@@ -76,7 +76,7 @@ export function PortalAuthProvider({ children }: { children: React.ReactNode }) 
     try {
       await fetch("/api/portal/auth/logout", { method: "POST" });
       setUser(null);
-      router.push("/portal/login");
+      router.push("/login");
     } catch (err) {
       console.error("Error during portal logout:", err);
     } finally {

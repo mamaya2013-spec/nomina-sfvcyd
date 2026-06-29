@@ -25,7 +25,7 @@ export async function updatePortalSession(request: NextRequest): Promise<NextRes
   // Protect all other /portal routes (excluding API routes which handle their own validation)
   if (!pathname.startsWith("/portal/api") && !session) {
     const url = request.nextUrl.clone();
-    url.pathname = "/portal/login";
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
