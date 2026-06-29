@@ -125,6 +125,38 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Determine target areas and subsecretarías for monotributistas (always unrestricted at subsecretaría level)
+    let targetMonoSubIds: string[] = [];
+    let targetMonoAreaIds: string[] = [];
+
+    if (es_secretario) {
+      targetMonoSubIds = [...targetSubIds];
+      targetMonoAreaIds = [...targetAreaIds];
+    } else {
+      targetMonoSubIds = [...(subsecretarias_ids || [])];
+      targetMonoAreaIds = [...(areas_ids || [])];
+
+      if (filterSub !== "all") {
+        if (!subsecretarias_ids.includes(filterSub)) {
+          return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+        }
+        targetMonoSubIds = [filterSub];
+        targetMonoAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id))).map((a) => a.id) || [];
+      }
+
+      if (filterArea !== "all") {
+        if (!areas_ids.includes(filterArea)) {
+          const parentSubId = areaSubMap.get(filterArea);
+          if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
+            return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+          }
+        }
+        targetMonoAreaIds = [filterArea];
+        const parentSubId = areaSubMap.get(filterArea);
+        targetMonoSubIds = parentSubId ? [parentSubId] : [];
+      }
+    }
+
     let becarios: any[] = [];
     let monotributistas: any[] = [];
     let ocs: any[] = [];
@@ -148,33 +180,46 @@ export async function GET(req: NextRequest) {
           (targetAreaIds.includes(b.area_id) || targetSubIds.includes(b.subsecretaria_id))
         );
         monotributistas = rawMonos.filter((m: any) => 
-          (targetAreaIds.includes(m.area_id) || targetSubIds.includes(m.subsecretaria_id))
+          (targetMonoAreaIds.includes(m.area_id) || targetMonoSubIds.includes(m.subsecretaria_id))
         );
       }
     } else {
       // Live Data
       // To build the OR filter for security:
-      let queryFilter = "";
+      let queryFilterBec = "";
       if (targetAreaIds.length > 0) {
-        queryFilter += `area_id.in.(${targetAreaIds.join(",")})`;
+        queryFilterBec += `area_id.in.(${targetAreaIds.join(",")})`;
       }
       if (targetSubIds.length > 0) {
-        if (queryFilter) queryFilter += ",";
-        queryFilter += `subsecretaria_id.in.(${targetSubIds.join(",")})`;
+        if (queryFilterBec) queryFilterBec += ",";
+        queryFilterBec += `subsecretaria_id.in.(${targetSubIds.join(",")})`;
       }
 
-      if (queryFilter) {
-        const { data: becs } = await supabase
-          .from("becarios")
-          .select("*")
-          .or(queryFilter);
-        const { data: monos } = await supabase
-          .from("monotributistas")
-          .select("*")
-          .or(queryFilter);
+      let queryFilterMono = "";
+      if (targetMonoAreaIds.length > 0) {
+        queryFilterMono += `area_id.in.(${targetMonoAreaIds.join(",")})`;
+      }
+      if (targetMonoSubIds.length > 0) {
+        if (queryFilterMono) queryFilterMono += ",";
+        queryFilterMono += `subsecretaria_id.in.(${targetMonoSubIds.join(",")})`;
+      }
 
-        becarios = becs || [];
-        monotributistas = monos || [];
+      if (queryFilterBec || queryFilterMono) {
+        if (queryFilterBec) {
+          const { data: becs } = await supabase
+            .from("becarios")
+            .select("*")
+            .or(queryFilterBec);
+          becarios = becs || [];
+        }
+        
+        if (queryFilterMono) {
+          const { data: monos } = await supabase
+            .from("monotributistas")
+            .select("*")
+            .or(queryFilterMono);
+          monotributistas = monos || [];
+        }
 
         const { data: activeOcs } = await supabase
           .from("ordenes_compromiso")
