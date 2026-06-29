@@ -83,32 +83,45 @@ export async function GET(req: NextRequest) {
         targetAreaIds = allAreas?.map((a) => a.id) || [];
       }
     } else {
-      targetSubIds = [...(subsecretarias_ids || [])];
-      targetAreaIds = [...(areas_ids || [])];
+      if (areas_ids && areas_ids.length > 0) {
+        targetSubIds = [];
+        targetAreaIds = [...areas_ids];
 
-      if (filterSub !== "all") {
-        if (!subsecretarias_ids.includes(filterSub)) {
-          return NextResponse.json({ error: "Acceso denegado a la subsecretaría filtrada" }, { status: 403 });
+        if (filterArea !== "all") {
+          if (!areas_ids.includes(filterArea)) {
+            return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+          }
+          targetAreaIds = [filterArea];
         }
-        targetSubIds = [filterSub];
-        // Filter target areas to only those belonging to this subsecretaría that the user has access to
-        const allowedAreasInSub = allAreas
-          ?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id)))
-          .map((a) => a.id) || [];
-        targetAreaIds = allowedAreasInSub;
-      }
+        if (filterSub !== "all") {
+          const allowedAreasInSub = allAreas
+            ?.filter((a) => a.subsecretaria_id === filterSub && areas_ids.includes(a.id))
+            .map((a) => a.id) || [];
+          if (allowedAreasInSub.length === 0) {
+            return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+          }
+          targetAreaIds = allowedAreasInSub;
+        }
+      } else {
+        targetSubIds = [...(subsecretarias_ids || [])];
+        targetAreaIds = allAreas?.filter((a) => subsecretarias_ids.includes(a.subsecretaria_id)).map((a) => a.id) || [];
 
-      if (filterArea !== "all") {
-        if (!areas_ids.includes(filterArea)) {
-          // Check if it belongs to an allowed subsecretaría
+        if (filterSub !== "all") {
+          if (!subsecretarias_ids.includes(filterSub)) {
+            return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+          }
+          targetSubIds = [filterSub];
+          targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub).map((a) => a.id) || [];
+        }
+
+        if (filterArea !== "all") {
           const parentSubId = areaSubMap.get(filterArea);
           if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
-            return NextResponse.json({ error: "Acceso denegado al área filtrada" }, { status: 403 });
+            return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
           }
+          targetAreaIds = [filterArea];
+          targetSubIds = [parentSubId];
         }
-        targetAreaIds = [filterArea];
-        const parentSubId = areaSubMap.get(filterArea);
-        targetSubIds = parentSubId ? [parentSubId] : [];
       }
     }
 
