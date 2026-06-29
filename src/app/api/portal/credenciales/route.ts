@@ -106,12 +106,41 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Perform upsert (using responsable_id as the conflict target since it is UNIQUE)
-    const { data, error } = await supabase
+    // Check if credentials record already exists for this responsable_id
+    const { data: existingCred } = await supabase
       .from("portal_credenciales")
-      .upsert(updateData, { onConflict: "responsable_id" })
-      .select("id, username, activo, created_at")
-      .single();
+      .select("id")
+      .eq("responsable_id", responsable_id)
+      .maybeSingle();
+
+    let data, error;
+
+    if (existingCred) {
+      // Perform update
+      const { data: updated, error: updErr } = await supabase
+        .from("portal_credenciales")
+        .update(updateData)
+        .eq("id", existingCred.id)
+        .select("id, username, activo, created_at")
+        .single();
+      data = updated;
+      error = updErr;
+    } else {
+      // Perform insert (must have password)
+      if (!password || password.trim() === "") {
+        return NextResponse.json(
+          { error: "La contraseña es requerida para habilitar el acceso al portal" },
+          { status: 400 }
+        );
+      }
+      const { data: inserted, error: insErr } = await supabase
+        .from("portal_credenciales")
+        .insert(updateData)
+        .select("id, username, activo, created_at")
+        .single();
+      data = inserted;
+      error = insErr;
+    }
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
