@@ -31,6 +31,7 @@ interface Movimiento {
   nombre_persona: string;
   subsecretaria_nombre: string;
   area_nombre: string;
+  solicitado_por?: string;
 }
 
 export default function PortalMovimientosPage() {
@@ -44,10 +45,17 @@ export default function PortalMovimientosPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterTipoPersona, setFilterTipoPersona] = useState("all");
   const [filterTipoMovimiento, setFilterTipoMovimiento] = useState("all");
+  const [filterMes, setFilterMes] = useState("all");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+
+  // Determine months belonging to the current semester
+  const monthsOfSemester = useMemo(() => {
+    if (!selectedSemester) return [1, 2, 3, 4, 5, 6];
+    return selectedSemester.numero_semestre === 1 ? [1, 2, 3, 4, 5, 6] : [7, 8, 9, 10, 11, 12];
+  }, [selectedSemester]);
 
   useEffect(() => {
     if (!selectedSemester) return;
@@ -85,18 +93,24 @@ export default function PortalMovimientosPage() {
         if (m.tipo_movimiento !== filterTipoMovimiento) return false;
       }
 
+      // Month
+      if (filterMes !== "all") {
+        if (m.mes !== Number(filterMes)) return false;
+      }
+
       // Search term
       if (searchTerm.trim() !== "") {
         const q = searchTerm.toLowerCase().trim();
         return (
           m.nombre_persona.toLowerCase().includes(q) ||
-          m.descripcion.toLowerCase().includes(q)
+          m.descripcion.toLowerCase().includes(q) ||
+          (m.solicitado_por && m.solicitado_por.toLowerCase().includes(q))
         );
       }
 
       return true;
     });
-  }, [movimientos, filterTipoPersona, filterTipoMovimiento, searchTerm]);
+  }, [movimientos, filterTipoPersona, filterTipoMovimiento, filterMes, searchTerm]);
 
   // Pagination
   const paginatedList = useMemo(() => {
@@ -215,6 +229,25 @@ export default function PortalMovimientosPage() {
               <option value="cambio_categoria">Cambio de Categoría</option>
             </select>
           </div>
+
+          <div className={styles.filterItem}>
+            <Calendar size={14} className={styles.filterIcon} />
+            <select
+              className={styles.filterSelect}
+              value={filterMes}
+              onChange={(e) => {
+                setFilterMes(e.target.value);
+                setCurrentPage(1);
+              }}
+            >
+              <option value="all">Todos los Meses</option>
+              {monthsOfSemester.map((m) => (
+                <option key={m} value={m.toString()}>
+                  {getMonthName(m)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -228,53 +261,57 @@ export default function PortalMovimientosPage() {
         <div className={styles.tableWrapper}>
           <table className={styles.table}>
             <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Agente</th>
-                <th>Tipo Persona</th>
-                <th>Movimiento</th>
-                <th>Descripción</th>
-                <th>Período Contable</th>
-                <th>Subsecretaría / Área</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedList.map((m) => {
-                const badge = getMovementBadgeDetails(m.tipo_movimiento);
-                return (
-                  <tr key={m.id}>
-                    <td>
-                      <span className={styles.dateTime}>
-                        {new Date(m.created_at).toLocaleDateString("es-AR")}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={styles.agentName}>{m.nombre_persona}</span>
-                    </td>
-                    <td>
-                      <span className={`${styles.agentTypeBadge} ${m.tipo_persona === "becario" ? styles.becarioBadge : styles.monoBadge}`}>
-                        {m.tipo_persona === "becario" ? "🎓 Becario" : "💼 Monotributista"}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`${styles.movBadge} ${badge.class}`}>
-                        {badge.text}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={styles.movementDesc}>{m.descripcion}</span>
-                    </td>
-                    <td>
-                      <span className={styles.periodName}>
-                        {getMonthName(m.mes)} {m.anio}
-                      </span>
-                    </td>
-                    <td>
-                      <div className={styles.organicaGroup}>
-                        <span className={styles.subText}>{m.subsecretaria_nombre}</span>
-                        <span className={styles.areaText}>{m.area_nombre}</span>
-                      </div>
-                    </td>
+               <tr>
+                 <th>Fecha</th>
+                 <th>Agente</th>
+                 <th>Tipo Persona</th>
+                 <th>Movimiento</th>
+                 <th>Descripción</th>
+                 <th>Solicitado por</th>
+                 <th>Período Contable</th>
+                 <th>Subsecretaría / Área</th>
+               </tr>
+             </thead>
+             <tbody>
+               {paginatedList.map((m) => {
+                 const badge = getMovementBadgeDetails(m.tipo_movimiento);
+                 return (
+                   <tr key={m.id}>
+                     <td>
+                       <span className={styles.dateTime}>
+                         {new Date(m.created_at).toLocaleDateString("es-AR")}
+                       </span>
+                     </td>
+                     <td>
+                       <span className={styles.agentName}>{m.nombre_persona}</span>
+                     </td>
+                     <td>
+                       <span className={`${styles.agentTypeBadge} ${m.tipo_persona === "becario" ? styles.becarioBadge : styles.monoBadge}`}>
+                         {m.tipo_persona === "becario" ? "🎓 Becario" : "💼 Monotributista"}
+                       </span>
+                     </td>
+                     <td>
+                       <span className={`${styles.movBadge} ${badge.class}`}>
+                         {badge.text}
+                       </span>
+                     </td>
+                     <td>
+                       <span className={styles.movementDesc}>{m.descripcion}</span>
+                     </td>
+                     <td>
+                       <span className={styles.solicitadoPor}>{m.solicitado_por || "-"}</span>
+                     </td>
+                     <td>
+                       <span className={styles.periodName}>
+                         {getMonthName(m.mes)} {m.anio}
+                       </span>
+                     </td>
+                     <td>
+                       <div className={styles.organicaGroup}>
+                         <span className={styles.subText}>{m.subsecretaria_nombre}</span>
+                         <span className={styles.areaText}>{m.area_nombre}</span>
+                       </div>
+                     </td>
                   </tr>
                 );
               })}
