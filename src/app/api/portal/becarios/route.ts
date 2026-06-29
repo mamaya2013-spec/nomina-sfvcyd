@@ -128,8 +128,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Fetch categories of the semester for mapping
+    const { data: semesterCats } = await supabase
+      .from("categorias_becas")
+      .select("id, numero_categoria")
+      .eq("semestre_id", semestreId);
+    const catMap = new Map(semesterCats?.map((c) => [c.id, c.numero_categoria]));
+
     // 3. Apply search & status filters in-memory (works uniformly for both live and snapshot data)
-    let filtered = [...becarios];
+    let filtered = (becarios || []).map((b) => ({
+      ...b,
+      categoria_nombre: b.categoria_beca_id ? `Categoría ${catMap.get(b.categoria_beca_id) || ""}` : "-",
+      subsecretaria_nombre: b.subsecretarias?.nombre || b.subsecretaria_nombre || "-",
+      area_nombre: b.areas?.nombre || b.area_nombre || "-",
+    }));
 
     // Responsable filter
     if (responsableId !== "all") {

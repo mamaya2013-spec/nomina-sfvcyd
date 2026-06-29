@@ -156,18 +156,19 @@
   border-color: rgba(16, 185, 129, 0.3);
 }
 
-/* Table */
 .tableWrapper {
   background: rgba(10, 18, 36, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 12px;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  min-width: 1000px;
 }
 
 .table th {

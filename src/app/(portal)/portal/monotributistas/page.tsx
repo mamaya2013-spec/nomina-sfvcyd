@@ -63,6 +63,7 @@ interface Monotributista {
   motivo_baja?: string;
   subsecretaria_nombre: string;
   area_nombre: string;
+  categoria_nombre?: string;
   documentos_aprobados: number;
   documentos: any[];
   seguro?: {
@@ -456,6 +457,7 @@ export default function PortalMonotributistasPage() {
             <thead>
               <tr>
                 <th>Nombre</th>
+                <th>Categoría</th>
                 <th>DNI / CUIT</th>
                 <th>Subsecretaría / Área</th>
                 <th className="text-right">Básico</th>
@@ -474,6 +476,11 @@ export default function PortalMonotributistasPage() {
                   <tr key={m.id}>
                     <td>
                       <span className={styles.agentName}>{m.apellido_nombre}</span>
+                    </td>
+                    <td>
+                      <span style={{ fontSize: "12px", fontWeight: "600", color: "#a78bfa" }}>
+                        {m.categoria_nombre || "-"}
+                      </span>
                     </td>
                     <td>
                       <div className={styles.docNumbers}>

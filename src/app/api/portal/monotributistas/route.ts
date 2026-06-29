@@ -127,8 +127,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Fetch categories of the semester for mapping
+    const { data: semesterCats } = await supabase
+      .from("categorias_monotributistas")
+      .select("id, letra")
+      .eq("semestre_id", semestreId);
+    const catMap = new Map(semesterCats?.map((c) => [c.id, c.letra]));
+
     // 3. Apply search & status filters
-    let filtered = [...monotributistas];
+    let filtered = (monotributistas || []).map((m) => ({
+      ...m,
+      categoria_nombre: m.categoria_mono_id ? `Categoría ${catMap.get(m.categoria_mono_id) || ""}` : "-",
+      subsecretaria_nombre: m.subsecretarias?.nombre || m.subsecretaria_nombre || "-",
+      area_nombre: m.areas?.nombre || m.area_nombre || "-",
+    }));
 
     // Responsable filter
     if (responsableId !== "all") {
