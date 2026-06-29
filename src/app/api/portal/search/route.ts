@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { subsecretarias_ids, areas_ids } = session;
-    if (!subsecretarias_ids?.length && !areas_ids?.length) {
+    const { subsecretarias_ids, areas_ids, es_secretario } = session;
+    if (!es_secretario && !subsecretarias_ids?.length && !areas_ids?.length) {
       return NextResponse.json({ results: [] });
     }
 
@@ -28,12 +28,27 @@ export async function GET(req: NextRequest) {
 
     // 1. Build security filter
     let queryFilter = "";
-    if (areas_ids.length > 0) {
-      queryFilter += `area_id.in.(${areas_ids.join(",")})`;
-    }
-    if (subsecretarias_ids.length > 0) {
-      if (queryFilter) queryFilter += ",";
-      queryFilter += `subsecretaria_id.in.(${subsecretarias_ids.join(",")})`;
+    if (es_secretario) {
+      const { data: allSubs } = await supabase.from("subsecretarias").select("id");
+      const { data: allAreas } = await supabase.from("areas").select("id");
+      const subIds = allSubs?.map(s => s.id) || [];
+      const areaIds = allAreas?.map(a => a.id) || [];
+      
+      if (areaIds.length > 0) {
+        queryFilter += `area_id.in.(${areaIds.join(",")})`;
+      }
+      if (subIds.length > 0) {
+        if (queryFilter) queryFilter += ",";
+        queryFilter += `subsecretaria_id.in.(${subIds.join(",")})`;
+      }
+    } else {
+      if (areas_ids.length > 0) {
+        queryFilter += `area_id.in.(${areas_ids.join(",")})`;
+      }
+      if (subsecretarias_ids.length > 0) {
+        if (queryFilter) queryFilter += ",";
+        queryFilter += `subsecretaria_id.in.(${subsecretarias_ids.join(",")})`;
+      }
     }
 
     if (!queryFilter) {

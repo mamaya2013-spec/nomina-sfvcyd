@@ -20,6 +20,7 @@ export async function GET() {
         nombre_completo: session.nombre_completo,
         subsecretarias_ids: session.subsecretarias_ids,
         areas_ids: session.areas_ids,
+        es_secretario: session.es_secretario,
       },
     });
   } catch (error: any) {

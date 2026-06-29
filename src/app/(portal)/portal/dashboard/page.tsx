@@ -91,7 +91,7 @@ function AnimatedCounter({
 export default function PortalDashboardPage() {
   const { user } = usePortalAuth();
   const { selectedSemester } = useSemester();
-  const { selectedSubsecretariaId, selectedAreaId } = usePortalFilter();
+  const { selectedSubsecretariaId, selectedAreaId, selectedResponsableId } = usePortalFilter();
 
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -103,7 +103,7 @@ export default function PortalDashboardPage() {
     async function loadDashboard() {
       setLoading(true);
       try {
-        const url = `/api/portal/dashboard?semestre_id=${semestreId}&subsecretaria_id=${selectedSubsecretariaId}&area_id=${selectedAreaId}`;
+        const url = `/api/portal/dashboard?semestre_id=${semestreId}&subsecretaria_id=${selectedSubsecretariaId}&area_id=${selectedAreaId}&responsable_id=${selectedResponsableId}`;
         const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
@@ -117,7 +117,7 @@ export default function PortalDashboardPage() {
     }
 
     loadDashboard();
-  }, [selectedSemester, selectedSubsecretariaId, selectedAreaId]);
+  }, [selectedSemester, selectedSubsecretariaId, selectedAreaId, selectedResponsableId]);
 
   if (loading || !dashboardData) {
     return (
@@ -171,6 +171,135 @@ export default function PortalDashboardPage() {
           <span className={styles.readOnlyBadge}>👁️ Modo Solo Lectura</span>
         </div>
       </div>
+
+      {/* Sección Financiera (Secretario only) */}
+      {user?.es_secretario && (
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className={styles.financeSection}
+        >
+          {(() => {
+            const ocsList = dashboardData?.ocs || [];
+            const totalAssigned = ocsList.reduce((sum: number, o: any) => sum + Number(o.monto_asignado || 0), 0);
+            const totalExecuted = ocsList.reduce((sum: number, o: any) => sum + Number(o.monto_ejecutado || 0), 0);
+            const totalRemaining = totalAssigned - totalExecuted;
+            const progress = totalAssigned > 0 ? (totalExecuted / totalAssigned) * 100 : 0;
+
+            // Determine health status
+            let statusText = "Presupuesto Saludable";
+            let statusClass = styles.financeStatusOk;
+            if (progress >= 95 || totalRemaining < 0) {
+              statusText = "Excedido / Límite Crítico";
+              statusClass = styles.financeStatusDanger;
+            } else if (progress >= 80) {
+              statusText = "Alerta de Partida Límite";
+              statusClass = styles.financeStatusWarning;
+            }
+
+            const getOcColor = (p: number) => {
+              if (p >= 95) return styles.bgRose;
+              if (p >= 80) return styles.bgAmber;
+              return styles.bgEmerald;
+            };
+
+            const getOcName = (tipo: string) => {
+              switch (tipo) {
+                case "becas": return "Becarios (Base)";
+                case "activa_becas": return "Becarios (Tarjeta Activa)";
+                case "monotributos": return "Monotributistas (Base)";
+                case "activa_monotributos": return "Monotributistas (Tarjeta Activa)";
+                default: return tipo;
+              }
+            };
+
+            return (
+              <>
+                <div className={styles.financeHeader}>
+                  <div className={styles.financeTitle}>
+                    <DollarSign size={20} className="text-emerald" />
+                    <span>Control Presupuestario de Partidas</span>
+                  </div>
+                  <span className={statusClass}>
+                    {statusText} ({progress.toFixed(1)}%)
+                  </span>
+                </div>
+
+                <div className={styles.financeGrid}>
+                  {/* Global card */}
+                  <div className={styles.globalBudgetCard}>
+                    <div>
+                      <span className={styles.budgetLabel}>Presupuesto Semestral Consolidado</span>
+                      <h4 className={styles.budgetValue}>
+                        {totalAssigned.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+                      </h4>
+                    </div>
+
+                    <div className={styles.budgetProgressBar}>
+                      <div
+                        className={`${styles.budgetProgressBarFill} ${getOcColor(progress)}`}
+                        style={{ width: `${Math.min(progress, 100)}%` }}
+                      />
+                    </div>
+
+                    <div className={styles.budgetSummaryStats}>
+                      <span className="text-secondary">
+                        Ejecutado: <strong>{totalExecuted.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
+                      </span>
+                      <span className={totalRemaining >= 0 ? "text-emerald" : "text-rose"}>
+                        {totalRemaining >= 0 ? "Disponible: " : "Sobregiro: "}
+                        <strong>{Math.abs(totalRemaining).toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Detailed grid */}
+                  <div className={styles.budgetDetailsGrid}>
+                    {["becas", "activa_becas", "monotributos", "activa_monotributos"].map((tipo) => {
+                      const oc = ocsList.find((o: any) => o.tipo === tipo) || {
+                        monto_asignado: 0,
+                        monto_ejecutado: 0,
+                        numero_oc: "N/A"
+                      };
+                      const assigned = Number(oc.monto_asignado);
+                      const executed = Number(oc.monto_ejecutado);
+                      const remaining = assigned - executed;
+                      const pct = assigned > 0 ? (executed / assigned) * 100 : 0;
+
+                      return (
+                        <div key={tipo} className={styles.financeDetailItem}>
+                          <div className={styles.financeDetailHeader}>
+                            <span>{getOcName(tipo)}</span>
+                            <span className="text-muted">OC #{oc.numero_oc}</span>
+                          </div>
+                          <h5 className={styles.financeDetailValue}>
+                            {assigned.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+                          </h5>
+                          
+                          <div className={styles.budgetProgressBar} style={{ height: "4px" }}>
+                            <div
+                              className={`${styles.budgetProgressBarFill} ${getOcColor(pct)}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+
+                          <div className={styles.financeDetailSub}>
+                            <span>Ejec: {pct.toFixed(0)}%</span>
+                            <span className={remaining >= 0 ? "text-emerald" : "text-rose"}>
+                              Disp: {remaining.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </motion.div>
+      )}
 
       {/* KPI Cards Grid */}
       <motion.div

@@ -9,6 +9,7 @@ interface PortalUser {
   nombre_completo: string;
   subsecretarias_ids: string[];
   areas_ids: string[];
+  es_secretario?: boolean;
 }
 
 interface PortalAuthContextType {

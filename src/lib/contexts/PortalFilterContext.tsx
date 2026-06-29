@@ -14,13 +14,22 @@ interface Area {
   subsecretaria_id: string;
 }
 
+interface Responsable {
+  id: string;
+  nombre_completo: string;
+  cargo?: string;
+}
+
 interface PortalFilterContextType {
   selectedSubsecretariaId: string; // "all" or specific uuid
   selectedAreaId: string; // "all" or specific uuid
+  selectedResponsableId: string; // "all" or specific uuid
   setSelectedSubsecretariaId: (id: string) => void;
   setSelectedAreaId: (id: string) => void;
+  setSelectedResponsableId: (id: string) => void;
   availableSubsecretarias: Subsecretaria[];
   availableAreas: Area[];
+  availableResponsables: Responsable[];
   loadingFilters: boolean;
 }
 
@@ -30,14 +39,20 @@ export function PortalFilterProvider({ children }: { children: React.ReactNode }
   const { user } = usePortalAuth();
   const [selectedSubsecretariaId, setSelectedSubsecretariaId] = useState<string>("all");
   const [selectedAreaId, setSelectedAreaId] = useState<string>("all");
+  const [selectedResponsableId, setSelectedResponsableId] = useState<string>("all");
   const [availableSubsecretarias, setAvailableSubsecretarias] = useState<Subsecretaria[]>([]);
   const [availableAreas, setAvailableAreas] = useState<Area[]>([]);
+  const [availableResponsables, setAvailableResponsables] = useState<Responsable[]>([]);
   const [loadingFilters, setLoadingFilters] = useState(false);
 
   useEffect(() => {
     if (!user) {
       setAvailableSubsecretarias([]);
       setAvailableAreas([]);
+      setAvailableResponsables([]);
+      setSelectedSubsecretariaId("all");
+      setSelectedAreaId("all");
+      setSelectedResponsableId("all");
       return;
     }
 
@@ -50,8 +65,19 @@ export function PortalFilterProvider({ children }: { children: React.ReactNode }
           setAvailableSubsecretarias(data.subsecretarias || []);
           setAvailableAreas(data.areas || []);
         }
+
+        // If Secretario, also fetch all managers
+        if (user?.es_secretario) {
+          const respRes = await fetch("/api/portal/responsables");
+          if (respRes.ok) {
+            const respData = await respRes.json();
+            setAvailableResponsables(respData.responsables || []);
+          }
+        } else {
+          setAvailableResponsables([]);
+        }
       } catch (err) {
-        console.error("Error fetching assigned areas:", err);
+        console.error("Error fetching assigned areas/managers:", err);
       } finally {
         setLoadingFilters(false);
       }
@@ -80,10 +106,13 @@ export function PortalFilterProvider({ children }: { children: React.ReactNode }
       value={{
         selectedSubsecretariaId,
         selectedAreaId,
+        selectedResponsableId,
         setSelectedSubsecretariaId,
         setSelectedAreaId,
+        setSelectedResponsableId,
         availableSubsecretarias,
         availableAreas: filteredAreas,
+        availableResponsables,
         loadingFilters,
       }}
     >

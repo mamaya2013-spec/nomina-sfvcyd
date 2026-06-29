@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
         responsables (
           nombre_completo,
           subsecretarias_ids,
-          areas_ids
+          areas_ids,
+          cargo
         )
       `)
       .eq("username", username.trim().toLowerCase())
@@ -142,6 +143,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const esSecretario =
+      responsable.cargo?.toLowerCase() === "secretario" ||
+      username.trim().toLowerCase() === "secretario";
+
     // 6. Create session JWT
     const tokenPayload = {
       responsable_id: cred.responsable_id,
@@ -149,6 +154,7 @@ export async function POST(req: NextRequest) {
       nombre_completo: responsable.nombre_completo,
       subsecretarias_ids: responsable.subsecretarias_ids || [],
       areas_ids: responsable.areas_ids || [],
+      es_secretario: esSecretario,
     };
 
     const token = await createPortalToken(tokenPayload);
@@ -160,6 +166,7 @@ export async function POST(req: NextRequest) {
         responsable_id: tokenPayload.responsable_id,
         username: tokenPayload.username,
         nombre_completo: tokenPayload.nombre_completo,
+        es_secretario: esSecretario,
       },
     });
 

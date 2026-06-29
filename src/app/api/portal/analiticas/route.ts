@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { subsecretarias_ids, areas_ids } = session;
-    if (!subsecretarias_ids?.length && !areas_ids?.length) {
+    const { subsecretarias_ids, areas_ids, es_secretario } = session;
+    if (!es_secretario && !subsecretarias_ids?.length && !areas_ids?.length) {
       return NextResponse.json({
         personalStats: { total: 0, becarios: 0, monotributistas: 0, byArea: [], byCategory: [] },
         financialStats: { totalBudget: 0, becariosBudget: 0, monosBudget: 0, byArea: [], evolution: [] },
@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
     const semestreId = searchParams.get("semestre_id");
     const filterSub = searchParams.get("subsecretaria_id") || "all";
     const filterArea = searchParams.get("area_id") || "all";
+    const responsableId = searchParams.get("responsable_id") || "all";
 
     if (!semestreId) {
       return NextResponse.json(
@@ -56,27 +57,44 @@ export async function GET(req: NextRequest) {
     const areaSubMap = new Map(allAreas?.map((a) => [a.id, a.subsecretaria_id]));
 
     // Determine target areas and subsecretarías based on filters
-    let targetSubIds = [...subsecretarias_ids];
-    let targetAreaIds = [...areas_ids];
+    let targetSubIds: string[] = [];
+    let targetAreaIds: string[] = [];
 
-    if (filterSub !== "all") {
-      if (!subsecretarias_ids.includes(filterSub)) {
-        return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
-      }
-      targetSubIds = [filterSub];
-      targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id))).map((a) => a.id) || [];
-    }
-
-    if (filterArea !== "all") {
-      if (!areas_ids.includes(filterArea)) {
+    if (es_secretario) {
+      if (filterSub !== "all") {
+        targetSubIds = [filterSub];
+        targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub).map((a) => a.id) || [];
+      } else if (filterArea !== "all") {
+        targetAreaIds = [filterArea];
         const parentSubId = areaSubMap.get(filterArea);
-        if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
+        targetSubIds = parentSubId ? [parentSubId] : [];
+      } else {
+        targetSubIds = allSubs?.map((s) => s.id) || [];
+        targetAreaIds = allAreas?.map((a) => a.id) || [];
+      }
+    } else {
+      targetSubIds = [...(subsecretarias_ids || [])];
+      targetAreaIds = [...(areas_ids || [])];
+
+      if (filterSub !== "all") {
+        if (!subsecretarias_ids.includes(filterSub)) {
           return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
         }
+        targetSubIds = [filterSub];
+        targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id))).map((a) => a.id) || [];
       }
-      targetAreaIds = [filterArea];
-      const parentSubId = areaSubMap.get(filterArea);
-      targetSubIds = parentSubId ? [parentSubId] : [];
+
+      if (filterArea !== "all") {
+        if (!areas_ids.includes(filterArea)) {
+          const parentSubId = areaSubMap.get(filterArea);
+          if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
+            return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+          }
+        }
+        targetAreaIds = [filterArea];
+        const parentSubId = areaSubMap.get(filterArea);
+        targetSubIds = parentSubId ? [parentSubId] : [];
+      }
     }
 
     let becarios: any[] = [];
@@ -128,6 +146,11 @@ export async function GET(req: NextRequest) {
         becarios = becs || [];
         monotributistas = monos || [];
       }
+    }
+
+    if (responsableId !== "all") {
+      becarios = becarios.filter((b) => b.responsable_id === responsableId);
+      monotributistas = monotributistas.filter((m) => m.responsable_id === responsableId);
     }
 
     const activeBecs = becarios.filter((b) => b.estado === "Activo");

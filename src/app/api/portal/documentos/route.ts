@@ -12,41 +12,96 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { subsecretarias_ids, areas_ids } = session;
-    if (!subsecretarias_ids?.length && !areas_ids?.length) {
+    const { subsecretarias_ids, areas_ids, es_secretario } = session;
+    if (!es_secretario && !subsecretarias_ids?.length && !areas_ids?.length) {
       return NextResponse.json({ documentos: [], total: 0 });
     }
 
     const { searchParams } = new URL(req.url);
     const filterSub = searchParams.get("subsecretaria_id") || "all";
     const filterArea = searchParams.get("area_id") || "all";
+    const responsableId = searchParams.get("responsable_id") || "all";
     const status = searchParams.get("status") || "all"; // 'all', 'pendiente', 'aprobado', 'rechazado'
     const search = searchParams.get("search") || "";
 
     const supabase = await createClient();
+
+    // Fetch areas and subsecretarías for reference
+    const { data: allAreas } = await supabase.from("areas").select("id, nombre, subsecretaria_id");
+    const areaSubMap = new Map(allAreas?.map((a) => [a.id, a.subsecretaria_id]));
+    const { data: allSubs } = await supabase.from("subsecretarias").select("id, nombre");
+
+    let targetSubIds: string[] = [];
+    let targetAreaIds: string[] = [];
+
+    if (es_secretario) {
+      if (filterSub !== "all") {
+        targetSubIds = [filterSub];
+        targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub).map((a) => a.id) || [];
+      } else if (filterArea !== "all") {
+        targetAreaIds = [filterArea];
+        const parentSubId = areaSubMap.get(filterArea);
+        targetSubIds = parentSubId ? [parentSubId] : [];
+      } else {
+        targetSubIds = allSubs?.map((s) => s.id) || [];
+        targetAreaIds = allAreas?.map((a) => a.id) || [];
+      }
+    } else {
+      targetSubIds = [...(subsecretarias_ids || [])];
+      targetAreaIds = [...(areas_ids || [])];
+
+      if (filterSub !== "all") {
+        if (!subsecretarias_ids.includes(filterSub)) {
+          return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+        }
+        targetSubIds = [filterSub];
+        targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id))).map((a) => a.id) || [];
+      }
+
+      if (filterArea !== "all") {
+        if (!areas_ids.includes(filterArea)) {
+          const parentSubId = areaSubMap.get(filterArea);
+          if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
+            return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+          }
+        }
+        targetAreaIds = [filterArea];
+        const parentSubId = areaSubMap.get(filterArea);
+        targetSubIds = parentSubId ? [parentSubId] : [];
+      }
+    }
 
     // 1. Fetch allowed people in these areas
     let allowedBecs: any[] = [];
     let allowedMonos: any[] = [];
 
     let queryFilter = "";
-    if (areas_ids.length > 0) {
-      queryFilter += `area_id.in.(${areas_ids.join(",")})`;
+    if (targetAreaIds.length > 0) {
+      queryFilter += `area_id.in.(${targetAreaIds.join(",")})`;
     }
-    if (subsecretarias_ids.length > 0) {
+    if (targetSubIds.length > 0) {
       if (queryFilter) queryFilter += ",";
-      queryFilter += `subsecretaria_id.in.(${subsecretarias_ids.join(",")})`;
+      queryFilter += `subsecretaria_id.in.(${targetSubIds.join(",")})`;
     }
 
     if (queryFilter) {
-      const { data: becs } = await supabase
+      let becQuery = supabase
         .from("becarios")
-        .select("id, apellido_nombre, subsecretaria_id, area_id")
+        .select("id, apellido_nombre, subsecretaria_id, area_id, responsable_id")
         .or(queryFilter);
-      const { data: monos } = await supabase
+
+      let monoQuery = supabase
         .from("monotributistas")
-        .select("id, apellido_nombre, subsecretaria_id, area_id")
+        .select("id, apellido_nombre, subsecretaria_id, area_id, responsable_id")
         .or(queryFilter);
+
+      if (responsableId !== "all") {
+        becQuery = becQuery.eq("responsable_id", responsableId);
+        monoQuery = monoQuery.eq("responsable_id", responsableId);
+      }
+
+      const { data: becs } = await becQuery;
+      const { data: monos } = await monoQuery;
       allowedBecs = becs || [];
       allowedMonos = monos || [];
     }
@@ -61,9 +116,6 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Fetch area/sub names
-    const { data: allSubs } = await supabase.from("subsecretarias").select("id, nombre");
-    const { data: allAreas } = await supabase.from("areas").select("id, nombre");
-    
     const subNameMap = new Map(allSubs?.map((s) => [s.id, s.nombre]));
     const areaNameMap = new Map(allAreas?.map((a) => [a.id, a.nombre]));
 

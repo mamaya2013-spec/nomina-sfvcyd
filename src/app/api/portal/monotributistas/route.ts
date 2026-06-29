@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { subsecretarias_ids, areas_ids } = session;
-    if (!subsecretarias_ids?.length && !areas_ids?.length) {
+    const { subsecretarias_ids, areas_ids, es_secretario } = session;
+    if (!es_secretario && !subsecretarias_ids?.length && !areas_ids?.length) {
       return NextResponse.json({ monotributistas: [], total: 0 });
     }
 
@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
     const semestreId = searchParams.get("semestre_id");
     const filterSub = searchParams.get("subsecretaria_id") || "all";
     const filterArea = searchParams.get("area_id") || "all";
+    const responsableId = searchParams.get("responsable_id") || "all";
     const search = searchParams.get("search") || "";
     const status = searchParams.get("status") || "all";
 
@@ -44,32 +45,49 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Semestre no encontrado" }, { status: 404 });
     }
 
-    // Determine target areas and subsecretarías based on filters
-    let targetSubIds = [...subsecretarias_ids];
-    let targetAreaIds = [...areas_ids];
-
-    // Fetch areas for reference
+    // Fetch areas and subsecretarías for reference
     const { data: allAreas } = await supabase.from("areas").select("id, nombre, subsecretaria_id");
     const areaSubMap = new Map(allAreas?.map((a) => [a.id, a.subsecretaria_id]));
+    const { data: allSubsecretarias } = await supabase.from("subsecretarias").select("id, nombre");
 
-    if (filterSub !== "all") {
-      if (!subsecretarias_ids.includes(filterSub)) {
-        return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
-      }
-      targetSubIds = [filterSub];
-      targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id))).map((a) => a.id) || [];
-    }
+    let targetSubIds: string[] = [];
+    let targetAreaIds: string[] = [];
 
-    if (filterArea !== "all") {
-      if (!areas_ids.includes(filterArea)) {
+    if (es_secretario) {
+      if (filterSub !== "all") {
+        targetSubIds = [filterSub];
+        targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub).map((a) => a.id) || [];
+      } else if (filterArea !== "all") {
+        targetAreaIds = [filterArea];
         const parentSubId = areaSubMap.get(filterArea);
-        if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
+        targetSubIds = parentSubId ? [parentSubId] : [];
+      } else {
+        targetSubIds = allSubsecretarias?.map((s) => s.id) || [];
+        targetAreaIds = allAreas?.map((a) => a.id) || [];
+      }
+    } else {
+      targetSubIds = [...(subsecretarias_ids || [])];
+      targetAreaIds = [...(areas_ids || [])];
+
+      if (filterSub !== "all") {
+        if (!subsecretarias_ids.includes(filterSub)) {
           return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
         }
+        targetSubIds = [filterSub];
+        targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id))).map((a) => a.id) || [];
       }
-      targetAreaIds = [filterArea];
-      const parentSubId = areaSubMap.get(filterArea);
-      targetSubIds = parentSubId ? [parentSubId] : [];
+
+      if (filterArea !== "all") {
+        if (!areas_ids.includes(filterArea)) {
+          const parentSubId = areaSubMap.get(filterArea);
+          if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
+            return NextResponse.json({ error: "Acceso denegado" }, { status: 403 });
+          }
+        }
+        targetAreaIds = [filterArea];
+        const parentSubId = areaSubMap.get(filterArea);
+        targetSubIds = parentSubId ? [parentSubId] : [];
+      }
     }
 
     let monotributistas: any[] = [];
@@ -111,6 +129,11 @@ export async function GET(req: NextRequest) {
 
     // 3. Apply search & status filters
     let filtered = [...monotributistas];
+
+    // Responsable filter
+    if (responsableId !== "all") {
+      filtered = filtered.filter((m) => m.responsable_id === responsableId);
+    }
 
     if (status !== "all") {
       filtered = filtered.filter((m) => m.estado === status);

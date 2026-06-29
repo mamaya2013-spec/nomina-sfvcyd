@@ -31,6 +31,7 @@ export interface PortalTokenPayload {
   nombre_completo: string;
   subsecretarias_ids: string[];
   areas_ids: string[];
+  es_secretario?: boolean;
 }
 
 export async function createPortalToken(payload: PortalTokenPayload): Promise<string> {

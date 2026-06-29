@@ -24,6 +24,7 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle,
+  FileText,
 } from "lucide-react";
 import { usePortalAuth } from "@/lib/contexts/PortalAuthContext";
 import { usePortalFilter } from "@/lib/contexts/PortalFilterContext";
@@ -38,7 +39,7 @@ interface MenuItem {
   icon: React.ComponentType<{ size?: number }>;
 }
 
-const menuItems: MenuItem[] = [
+const responsableMenuItems: MenuItem[] = [
   { name: "Dashboard", path: "/portal/dashboard", icon: LayoutDashboard },
   { name: "Mis Becarios", path: "/portal/becarios", icon: Users },
   { name: "Mis Monotributistas", path: "/portal/monotributistas", icon: Briefcase },
@@ -48,17 +49,33 @@ const menuItems: MenuItem[] = [
   { name: "Categorías y Montos", path: "/portal/montos", icon: Layers },
 ];
 
+const secretarioMenuItems: MenuItem[] = [
+  { name: "Dashboard Financiero", path: "/portal/dashboard", icon: LayoutDashboard },
+  { name: "Resumen de Gestión", path: "/portal/resumen", icon: BarChart3 },
+  { name: "Becarios", path: "/portal/becarios", icon: Users },
+  { name: "Monotributistas", path: "/portal/monotributistas", icon: Briefcase },
+  { name: "Movimientos", path: "/portal/movimientos", icon: Activity },
+  { name: "Órdenes de Compromiso", path: "/portal/ordenes", icon: FileText },
+  { name: "Campañas y Docs", path: "/portal/campanas", icon: FolderOpen },
+  { name: "Categorías y Montos", path: "/portal/montos", icon: Layers },
+];
+
 export default function PortalLayoutClient({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = usePortalAuth();
   const {
     selectedSubsecretariaId,
     selectedAreaId,
+    selectedResponsableId,
     setSelectedSubsecretariaId,
     setSelectedAreaId,
+    setSelectedResponsableId,
     availableSubsecretarias,
     availableAreas,
+    availableResponsables,
     loadingFilters,
   } = usePortalFilter();
+
+  const menuItems = user?.es_secretario ? secretarioMenuItems : responsableMenuItems;
 
   const { semesters, selectedSemester, selectSemester, loading: loadingSemesters } = useSemester();
   const { theme, toggleTheme } = useTheme();
@@ -255,7 +272,9 @@ export default function PortalLayoutClient({ children }: { children: React.React
             <span className={styles.userName} title={user?.nombre_completo}>
               {user?.nombre_completo}
             </span>
-            <span className={styles.userRole}>Responsable</span>
+            <span className={styles.userRole}>
+              {user?.es_secretario ? "Secretario de Hacienda" : "Responsable"}
+            </span>
           </div>
           <button onClick={logout} className={styles.logoutButton}>
             <LogOut size={18} />
@@ -301,7 +320,9 @@ export default function PortalLayoutClient({ children }: { children: React.React
             <div className={styles.mobileNavFooter}>
               <div className={styles.userInfo} style={{ marginBottom: "16px" }}>
                 <span className={styles.userName}>{user?.nombre_completo}</span>
-                <span className={styles.userRole}>Responsable</span>
+                <span className={styles.userRole}>
+                  {user?.es_secretario ? "Secretario de Hacienda" : "Responsable"}
+                </span>
               </div>
               <button
                 onClick={() => {
@@ -382,6 +403,26 @@ export default function PortalLayoutClient({ children }: { children: React.React
                   {availableAreas.map((area) => (
                     <option key={area.id} value={area.id}>
                       {area.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Responsable Selector (Secretario only) */}
+            {user?.es_secretario && availableResponsables.length > 0 && (
+              <div className={styles.filterGroup}>
+                <Users size={16} className={styles.filterIcon} />
+                <select
+                  value={selectedResponsableId}
+                  onChange={(e) => setSelectedResponsableId(e.target.value)}
+                  className={styles.headerSelect}
+                  disabled={loadingFilters}
+                >
+                  <option value="all">Todos los Responsables</option>
+                  {availableResponsables.map((resp) => (
+                    <option key={resp.id} value={resp.id}>
+                      {resp.nombre_completo}
                     </option>
                   ))}
                 </select>

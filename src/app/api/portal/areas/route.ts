@@ -13,7 +13,32 @@ export async function GET() {
       );
     }
 
-    const { subsecretarias_ids, areas_ids } = session;
+    const { subsecretarias_ids, areas_ids, es_secretario } = session;
+
+    const supabase = await createClient();
+
+    let subsecretarias: any[] = [];
+    let areas: any[] = [];
+
+    if (es_secretario) {
+      // Secretario has access to all active subsecretarias and areas
+      const { data: allSubs } = await supabase
+        .from("subsecretarias")
+        .select("id, nombre")
+        .eq("activa", true)
+        .order("nombre", { ascending: true });
+
+      const { data: allAreas } = await supabase
+        .from("areas")
+        .select("id, nombre, subsecretaria_id")
+        .eq("activa", true)
+        .order("nombre", { ascending: true });
+
+      return NextResponse.json({
+        subsecretarias: allSubs || [],
+        areas: allAreas || [],
+      });
+    }
 
     if (!subsecretarias_ids?.length && !areas_ids?.length) {
       return NextResponse.json({
@@ -21,11 +46,6 @@ export async function GET() {
         areas: [],
       });
     }
-
-    const supabase = await createClient();
-
-    let subsecretarias: any[] = [];
-    let areas: any[] = [];
 
     // Fetch subsecretarias if any
     if (subsecretarias_ids && subsecretarias_ids.length > 0) {

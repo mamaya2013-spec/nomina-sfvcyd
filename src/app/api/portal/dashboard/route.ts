@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { subsecretarias_ids, areas_ids } = session;
-    if (!subsecretarias_ids?.length && !areas_ids?.length) {
+    const { subsecretarias_ids, areas_ids, es_secretario } = session;
+    if (!es_secretario && !subsecretarias_ids?.length && !areas_ids?.length) {
       return NextResponse.json({
         metrics: {
           totalPersonal: 0,
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     const semestreId = searchParams.get("semestre_id");
     const filterSub = searchParams.get("subsecretaria_id") || "all";
     const filterArea = searchParams.get("area_id") || "all";
+    const responsableId = searchParams.get("responsable_id") || "all";
 
     if (!semestreId) {
       return NextResponse.json(
@@ -66,32 +67,49 @@ export async function GET(req: NextRequest) {
     const areaSubMap = new Map(allAreas?.map((a) => [a.id, a.subsecretaria_id]));
 
     // Determine target areas and subsecretarías based on filters
-    let targetSubIds = [...subsecretarias_ids];
-    let targetAreaIds = [...areas_ids];
+    let targetSubIds: string[] = [];
+    let targetAreaIds: string[] = [];
 
-    if (filterSub !== "all") {
-      if (!subsecretarias_ids.includes(filterSub)) {
-        return NextResponse.json({ error: "Acceso denegado a la subsecretaría filtrada" }, { status: 403 });
-      }
-      targetSubIds = [filterSub];
-      // Filter target areas to only those belonging to this subsecretaría that the user has access to
-      const allowedAreasInSub = allAreas
-        ?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id)))
-        .map((a) => a.id) || [];
-      targetAreaIds = allowedAreasInSub;
-    }
-
-    if (filterArea !== "all") {
-      if (!areas_ids.includes(filterArea)) {
-        // Check if it belongs to an allowed subsecretaría
+    if (es_secretario) {
+      if (filterSub !== "all") {
+        targetSubIds = [filterSub];
+        targetAreaIds = allAreas?.filter((a) => a.subsecretaria_id === filterSub).map((a) => a.id) || [];
+      } else if (filterArea !== "all") {
+        targetAreaIds = [filterArea];
         const parentSubId = areaSubMap.get(filterArea);
-        if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
-          return NextResponse.json({ error: "Acceso denegado al área filtrada" }, { status: 403 });
-        }
+        targetSubIds = parentSubId ? [parentSubId] : [];
+      } else {
+        targetSubIds = allSubs?.map((s) => s.id) || [];
+        targetAreaIds = allAreas?.map((a) => a.id) || [];
       }
-      targetAreaIds = [filterArea];
-      const parentSubId = areaSubMap.get(filterArea);
-      targetSubIds = parentSubId ? [parentSubId] : [];
+    } else {
+      targetSubIds = [...(subsecretarias_ids || [])];
+      targetAreaIds = [...(areas_ids || [])];
+
+      if (filterSub !== "all") {
+        if (!subsecretarias_ids.includes(filterSub)) {
+          return NextResponse.json({ error: "Acceso denegado a la subsecretaría filtrada" }, { status: 403 });
+        }
+        targetSubIds = [filterSub];
+        // Filter target areas to only those belonging to this subsecretaría that the user has access to
+        const allowedAreasInSub = allAreas
+          ?.filter((a) => a.subsecretaria_id === filterSub && (areas_ids.includes(a.id) || subsecretarias_ids.includes(a.subsecretaria_id)))
+          .map((a) => a.id) || [];
+        targetAreaIds = allowedAreasInSub;
+      }
+
+      if (filterArea !== "all") {
+        if (!areas_ids.includes(filterArea)) {
+          // Check if it belongs to an allowed subsecretaría
+          const parentSubId = areaSubMap.get(filterArea);
+          if (!parentSubId || !subsecretarias_ids.includes(parentSubId)) {
+            return NextResponse.json({ error: "Acceso denegado al área filtrada" }, { status: 403 });
+          }
+        }
+        targetAreaIds = [filterArea];
+        const parentSubId = areaSubMap.get(filterArea);
+        targetSubIds = parentSubId ? [parentSubId] : [];
+      }
     }
 
     let becarios: any[] = [];
@@ -151,6 +169,11 @@ export async function GET(req: NextRequest) {
           .eq("semestre_id", semestreId);
         ocs = activeOcs || [];
       }
+    }
+
+    if (responsableId !== "all") {
+      becarios = becarios.filter((b) => b.responsable_id === responsableId);
+      monotributistas = monotributistas.filter((m) => m.responsable_id === responsableId);
     }
 
     // Filter people list for counts (Active only)
@@ -414,6 +437,7 @@ export async function GET(req: NextRequest) {
       },
       recentActivity,
       alertsList,
+      ocs: ocs || [],
     });
   } catch (error: any) {
     console.error("Portal Dashboard API Error:", error);
