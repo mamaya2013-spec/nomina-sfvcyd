@@ -229,9 +229,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (responsableId !== "all") {
-      becarios = becarios.filter((b) => b.responsable_id === responsableId);
-      monotributistas = monotributistas.filter((m) => m.responsable_id === responsableId);
+    const activeResponsableId = es_secretario ? responsableId : session.responsable_id;
+    if (activeResponsableId !== "all") {
+      becarios = becarios.filter((b) => b.responsable_id === activeResponsableId);
+      monotributistas = monotributistas.filter((m) => m.responsable_id === activeResponsableId);
     }
 
     // Filter people list for counts (Active only)

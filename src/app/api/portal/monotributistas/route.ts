@@ -142,9 +142,10 @@ export async function GET(req: NextRequest) {
       area_nombre: m.areas?.nombre || m.area_nombre || "-",
     }));
 
-    // Responsable filter
-    if (responsableId !== "all") {
-      filtered = filtered.filter((m) => m.responsable_id === responsableId);
+    // Enforce responsable filter for normal Responsables
+    const activeResponsableId = es_secretario ? responsableId : session.responsable_id;
+    if (activeResponsableId !== "all") {
+      filtered = filtered.filter((m) => m.responsable_id === activeResponsableId);
     }
 
     if (status !== "all") {

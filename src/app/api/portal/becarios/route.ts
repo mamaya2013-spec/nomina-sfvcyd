@@ -161,9 +161,10 @@ export async function GET(req: NextRequest) {
       area_nombre: b.areas?.nombre || b.area_nombre || "-",
     }));
 
-    // Responsable filter
-    if (responsableId !== "all") {
-      filtered = filtered.filter((b) => b.responsable_id === responsableId);
+    // Enforce responsable filter for normal Responsables
+    const activeResponsableId = es_secretario ? responsableId : session.responsable_id;
+    if (activeResponsableId !== "all") {
+      filtered = filtered.filter((b) => b.responsable_id === activeResponsableId);
     }
 
     // Status filter
