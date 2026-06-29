@@ -498,7 +498,14 @@ export default function PortalDashboardPage() {
                     fontSize={11}
                     tickFormatter={(v) => `$${(v / 1000).toLocaleString()}k`}
                   />
-                  <YAxis dataKey="name" type="category" stroke="#64748b" fontSize={11} width={80} />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    stroke="#64748b"
+                    fontSize={10}
+                    width={140}
+                    tickFormatter={(name) => (name && name.length > 22 ? name.substring(0, 20) + "..." : name)}
+                  />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "#0f172a",

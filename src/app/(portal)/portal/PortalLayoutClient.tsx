@@ -273,7 +273,7 @@ export default function PortalLayoutClient({ children }: { children: React.React
               {user?.nombre_completo}
             </span>
             <span className={styles.userRole}>
-              {user?.es_secretario ? "Secretario de Hacienda" : "Responsable"}
+              {user?.es_secretario ? "Secretario de SFVCyD" : "Responsable"}
             </span>
           </div>
           <button onClick={logout} className={styles.logoutButton}>
@@ -321,7 +321,7 @@ export default function PortalLayoutClient({ children }: { children: React.React
               <div className={styles.userInfo} style={{ marginBottom: "16px" }}>
                 <span className={styles.userName}>{user?.nombre_completo}</span>
                 <span className={styles.userRole}>
-                  {user?.es_secretario ? "Secretario de Hacienda" : "Responsable"}
+                  {user?.es_secretario ? "Secretario de SFVCyD" : "Responsable"}
                 </span>
               </div>
               <button
